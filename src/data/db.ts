@@ -1,0 +1,245 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import type { Patient, CareEvent, VitalObservation, Appointment } from './types';
+
+interface StoreData {
+  patients: Patient[];
+  careEvents: CareEvent[];
+  vitals: VitalObservation[];
+  appointments: Appointment[];
+}
+
+const dataDir = path.join(process.cwd(), '.data');
+const storeFilePath = path.join(dataDir, 'store.json');
+
+export const INITIAL_DEMO_PATIENTS: Patient[] = [
+  {
+    id: 'p-001',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0814',
+    name: 'Mostafa Ibrahim',
+    sex: 'Male',
+    age: 54,
+    dateOfBirth: '1972-04-12',
+    phone: '+20 100 482 9102',
+    status: 'Follow-up',
+    primaryConcern: 'Hypertension and T2D follow-up',
+    socialHistory: 'Non-smoker, active',
+    carePlan: 'HTN & T2D Management 2026',
+    lastVisitDate: '14 Oct 2026',
+    createdAt: '2026-01-10T08:00:00Z',
+    updatedAt: '2026-10-14T10:30:00Z',
+  },
+  {
+    id: 'p-002',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0421',
+    name: 'Amina Mansour',
+    sex: 'Female',
+    age: 38,
+    dateOfBirth: '1988-09-23',
+    phone: '+20 101 553 8291',
+    status: 'Stable',
+    primaryConcern: 'Annual comprehensive health check',
+    socialHistory: 'Non-smoker',
+    carePlan: 'Preventive Wellness 2026',
+    lastVisitDate: '12 Oct 2026',
+    createdAt: '2026-02-14T09:00:00Z',
+    updatedAt: '2026-10-12T11:00:00Z',
+  },
+  {
+    id: 'p-003',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0119',
+    name: 'Tariq Al-Sayed',
+    sex: 'Male',
+    age: 62,
+    dateOfBirth: '1964-11-05',
+    phone: '+20 102 774 1903',
+    status: 'Critical',
+    primaryConcern: 'Uncontrolled blood glucose spikes',
+    socialHistory: 'Former smoker (quit 2020)',
+    carePlan: 'Intensive Glycemic Control',
+    lastVisitDate: '13 Oct 2026',
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-10-13T14:20:00Z',
+  },
+  {
+    id: 'p-004',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0542',
+    name: 'Fatima Zahra',
+    sex: 'Female',
+    age: 29,
+    dateOfBirth: '1997-03-18',
+    phone: '+20 109 332 6451',
+    status: 'New',
+    primaryConcern: 'Initial obstetrics consultation',
+    socialHistory: 'Non-smoker',
+    carePlan: 'Antenatal Care Pathway',
+    lastVisitDate: '14 Oct 2026',
+    createdAt: '2026-10-14T07:30:00Z',
+    updatedAt: '2026-10-14T07:30:00Z',
+  },
+  {
+    id: 'p-005',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0887',
+    name: 'Khaled Omar',
+    sex: 'Male',
+    age: 47,
+    dateOfBirth: '1979-06-30',
+    phone: '+20 106 881 2940',
+    status: 'Needs review',
+    primaryConcern: 'Elevated fasting lipid profile',
+    socialHistory: 'Sedentary work',
+    carePlan: 'Cardiovascular Risk Reduction',
+    lastVisitDate: '10 Oct 2026',
+    createdAt: '2026-04-12T11:00:00Z',
+    updatedAt: '2026-10-10T12:00:00Z',
+  },
+  {
+    id: 'p-006',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0331',
+    name: 'Laila Hassan',
+    sex: 'Female',
+    age: 71,
+    dateOfBirth: '1955-01-14',
+    phone: '+20 100 992 4118',
+    status: 'Stable',
+    primaryConcern: 'Knee osteoarthritis pain management',
+    socialHistory: 'Assisted ambulation',
+    carePlan: 'Joint Mobility & Pain Control',
+    lastVisitDate: '08 Oct 2026',
+    createdAt: '2025-11-20T08:30:00Z',
+    updatedAt: '2026-10-08T09:45:00Z',
+  },
+  {
+    id: 'p-007',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0922',
+    name: 'Youssef Nabil',
+    sex: 'Male',
+    age: 19,
+    dateOfBirth: '2007-08-09',
+    phone: '+20 111 654 9982',
+    status: 'New',
+    primaryConcern: 'College sports clearance physical',
+    socialHistory: 'Varsity athlete',
+    carePlan: 'Athletic Clearance Protocol',
+    lastVisitDate: '14 Oct 2026',
+    createdAt: '2026-10-14T09:15:00Z',
+    updatedAt: '2026-10-14T09:15:00Z',
+  },
+  {
+    id: 'p-008',
+    orgId: 'org-demo',
+    mrn: 'MRN-2026-0774',
+    name: 'Mona Sherif',
+    sex: 'Female',
+    age: 52,
+    dateOfBirth: '1974-12-02',
+    phone: '+20 102 331 8765',
+    status: 'Follow-up',
+    primaryConcern: 'Post-op thyroidectomy hormone titration',
+    socialHistory: 'Non-smoker',
+    carePlan: 'Endocrine Titration 2026',
+    lastVisitDate: '11 Oct 2026',
+    createdAt: '2026-05-18T10:00:00Z',
+    updatedAt: '2026-10-11T13:00:00Z',
+  },
+];
+
+export const INITIAL_CARE_EVENTS: CareEvent[] = [
+  {
+    id: 'ce-001',
+    orgId: 'org-demo',
+    patientId: 'p-001',
+    kind: 'visit',
+    label: 'Routine Clinical Follow-up',
+    summary: 'Blood pressure checked, medication adherence reviewed with Dr. Tarek',
+    occurredAt: '14 Oct 2026',
+    source: 'doctor',
+    createdBy: 'Dr. Tarek',
+  },
+  {
+    id: 'ce-002',
+    orgId: 'org-demo',
+    patientId: 'p-001',
+    kind: 'lab',
+    label: 'Comprehensive Metabolic Panel',
+    summary: 'Fasting Glucose 112 mg/dL, HbA1c 6.9%',
+    occurredAt: '02 Sep 2026',
+    source: 'staff',
+    createdBy: 'Central Lab',
+  },
+  {
+    id: 'ce-003',
+    orgId: 'org-demo',
+    patientId: 'p-001',
+    kind: 'procedure',
+    label: 'Standard 12-Lead Electrocardiogram',
+    summary: 'Normal sinus rhythm, 72 bpm, no acute ST changes',
+    occurredAt: '18 Aug 2026',
+    source: 'staff',
+    createdBy: 'Staff Nurse',
+  },
+];
+
+export const INITIAL_VITALS: VitalObservation[] = [
+  { id: 'v-1', orgId: 'org-demo', patientId: 'p-001', metric: 'pulse', value: '78', unit: 'bpm', measuredAt: '14 Oct 2026', source: 'staff' },
+  { id: 'v-2', orgId: 'org-demo', patientId: 'p-001', metric: 'pressure', value: '128/82', unit: 'mmHg', measuredAt: '14 Oct 2026', source: 'staff' },
+  { id: 'v-3', orgId: 'org-demo', patientId: 'p-001', metric: 'oxygen', value: '98', unit: '%', measuredAt: '14 Oct 2026', source: 'staff' },
+  { id: 'v-4', orgId: 'org-demo', patientId: 'p-001', metric: 'temp', value: '36.7', unit: '°C', measuredAt: '14 Oct 2026', source: 'staff' },
+  { id: 'v-5', orgId: 'org-demo', patientId: 'p-001', metric: 'glucose', value: '112', unit: 'mg/dL', measuredAt: '14 Oct 2026', source: 'staff' },
+];
+
+export const INITIAL_APPOINTMENTS: Appointment[] = [
+  { id: 'apt-1', orgId: 'org-demo', patientId: 'p-001', patientName: 'Mostafa Ibrahim', scheduledTime: '09:00 AM', visitType: 'Follow-up', status: 'completed' },
+  { id: 'apt-2', orgId: 'org-demo', patientId: 'p-004', patientName: 'Fatima Zahra', scheduledTime: '10:30 AM', visitType: 'Initial Consultation', status: 'completed' },
+  { id: 'apt-3', orgId: 'org-demo', patientId: 'p-007', patientName: 'Youssef Nabil', scheduledTime: '01:00 PM', visitType: 'Sports Physical', status: 'scheduled' },
+  { id: 'apt-4', orgId: 'org-demo', patientId: 'p-003', patientName: 'Tariq Al-Sayed', scheduledTime: '03:15 PM', visitType: 'Urgent Glycemic Review', status: 'scheduled' },
+];
+
+function getInitialStore(): StoreData {
+  return {
+    patients: [...INITIAL_DEMO_PATIENTS],
+    careEvents: [...INITIAL_CARE_EVENTS],
+    vitals: [...INITIAL_VITALS],
+    appointments: [...INITIAL_APPOINTMENTS],
+  };
+}
+
+export function readStore(): StoreData {
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (!fs.existsSync(storeFilePath)) {
+      const initial = getInitialStore();
+      fs.writeFileSync(storeFilePath, JSON.stringify(initial, null, 2), 'utf8');
+      return initial;
+    }
+    const raw = fs.readFileSync(storeFilePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return getInitialStore();
+  }
+}
+
+export function writeStore(data: StoreData): void {
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    fs.writeFileSync(storeFilePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to write store:', err);
+  }
+}
+
+export function resetStore(): void {
+  const initial = getInitialStore();
+  writeStore(initial);
+}

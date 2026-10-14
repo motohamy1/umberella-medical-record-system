@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "../styles/tokens.generated.css";
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-grotesk);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+
+  [dir="rtl"] body {
+    font-family: var(--font-arabic);
+  }
+}
