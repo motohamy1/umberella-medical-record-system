@@ -101,7 +101,11 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const fullMax = allDates.length ? new Date(Math.max(...allDates)) : new Date(Date.now() + DAY);
   fullMax.setDate(fullMax.getDate() + 21);
 
-  const [viewStart, setViewStart] = useState<Date>(fullMin);
+  /* PACK §7.3: default view is the last ~5 months ending at the newest event,
+   * not the whole history (the scrubber + zoom reach the rest). */
+  const DEFAULT_SPAN = 150 * DAY;
+  const defaultStart = () => new Date(Math.max(fullMin.getTime(), fullMax.getTime() - DEFAULT_SPAN));
+  const [viewStart, setViewStart] = useState<Date>(defaultStart);
   const [viewEnd, setViewEnd] = useState<Date>(fullMax);
 
   /* Reset the visible window only when the data's real time bounds change.
@@ -109,7 +113,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
    * inline/default array (new identity every render). */
   const boundsKey = allDates.length ? `${Math.min(...allDates)}|${Math.max(...allDates)}` : 'empty';
   useEffect(() => {
-    setViewStart(fullMin);
+    setViewStart(defaultStart());
     setViewEnd(fullMax);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundsKey]);
@@ -230,36 +234,59 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     });
   });
 
-  /* ---- collision-aware lane packing ----
-   * Estimate each node's horizontal footprint (circle + label, or full card width
-   * for imaging), sort by x, then greedily assign lanes so nothing overlaps at any
-   * zoom level. Lane rows grow as needed; the canvas height follows. */
-  const nodeFootprint = (c: ChildNode, x: number) => {
-    if (c.kind === 'imaging') return { left: x - 74, right: x + 74, height: 156 };
-    const labelW = Math.min(130, c.label.length * 6.0);
-    return { left: x - 20, right: x + 20 + 6 + labelW, height: 34 };
-  };
+  /* ---- PACK §7.3 layout: children hang in their parent milestone's column,
+   * staggered so nothing collides; labels truncate; lanes are capped and
+   * overflow collapses into a "+N more" chip that zooms to the milestone. ---- */
+  const MAX_LABEL_W = 104;
+  const MAX_LANES = 2;
+  const labelW = (label: string) => Math.min(MAX_LABEL_W, label.length * 6.0);
   const laid = (() => {
-    const items = childNodes.map((c) => ({ c, x: tx(c.date) })).sort((a, b) => a.x - b.x);
+    const parentX = new Map(milestones.map((m) => [m.id, tx(parseDate(m.occurredAt))] as const));
+    const items = childNodes.map((c) => {
+      const px = parentX.get(c.parent) ?? tx(c.date);
+      const isImg = c.kind === 'imaging';
+      // raw date position, pulled into the parent's column, then kept inside the canvas
+      let x = Math.min(Math.max(tx(c.date), px - 22), px + 70);
+      if (isImg) x = Math.max(84, Math.min(x, width - 84));
+      else x = Math.max(26, Math.min(x, width - Math.max(26, labelW(c.label) + 34)));
+      return { c, x: Math.round(x), isImg };
+    }).sort((a, b) => a.x - b.x);
+
+    type Placed = { c: ChildNode; x: number; isImg: boolean; flip: boolean; fp: [number, number]; h: number; lane: number };
+    const placed: Placed[] = [];
     const laneSpans: Array<Array<[number, number]>> = [];
     const laneHeights: number[] = [];
-    const laneAssign = new Map<string, number>();
-    for (const { c, x } of items) {
-      const fp = nodeFootprint(c, x);
+    const overflow = new Map<string, number>();
+
+    for (const { c, x, isImg } of items) {
+      const lw = labelW(c.label);
+      const flip = !isImg && x + 20 + lw > width - 10 && x - 20 - lw > 10;
+      const fp: [number, number] = isImg
+        ? [x - 76, x + 76]
+        : flip ? [x - 20 - lw, x + 18] : [x - 18, x + 20 + lw];
+      const h = isImg ? 158 : 34;
       let lane = -1;
       for (let i = 0; i < laneSpans.length; i++) {
-        if (laneSpans[i].every(([l, r]) => fp.right < l - 10 || fp.left > r + 10)) { lane = i; break; }
+        if (laneSpans[i].every(([l, r]) => fp[1] < l - 8 || fp[0] > r + 8)) { lane = i; break; }
       }
-      if (lane === -1) { lane = laneSpans.length; laneSpans.push([]); laneHeights.push(0); }
-      laneSpans[lane].push([fp.left, fp.right]);
-      laneHeights[lane] = Math.max(laneHeights[lane], fp.height);
-      laneAssign.set(c.id, lane);
+      if (lane === -1) {
+        if (laneSpans.length >= MAX_LANES) { overflow.set(c.parent, (overflow.get(c.parent) || 0) + 1); continue; }
+        lane = laneSpans.length; laneSpans.push([]); laneHeights.push(0);
+      }
+      laneSpans[lane].push(fp);
+      laneHeights[lane] = Math.max(laneHeights[lane], h);
+      placed.push({ c, x, isImg, flip, fp, h, lane });
     }
+
     const laneTops: number[] = [];
     let y = 96;
     for (let i = 0; i < laneSpans.length; i++) { laneTops.push(y); y += laneHeights[i] + 18; }
-    const bottom = laneTops.length ? laneTops[laneTops.length - 1] + laneHeights[laneHeights.length - 1] : 130;
-    return { laneTop: (id: string) => laneTops[laneAssign.get(id) ?? 0] ?? 96, canvasH: Math.max(250, bottom + 34) };
+    const pos = new Map<string, { x: number; y: number; flip: boolean }>();
+    for (const p of placed) pos.set(p.c.id, { x: p.x, y: laneTops[p.lane] ?? 96, flip: p.flip });
+    const canvasH = Math.max(250, (laneTops.length ? laneTops[laneTops.length - 1] + laneHeights[laneHeights.length - 1] : 130) + 36);
+    // last usable lane top, for the overflow chip
+    const chipY = (laneTops.length ? laneTops[Math.min(laneTops.length, MAX_LANES) - 1] : 96) + 2;
+    return { pos, canvasH, overflow, chipY };
   })();
 
   /* density buckets on axis (weekly) */
@@ -268,6 +295,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
 
   const daysSpan = (viewEnd.getTime() - viewStart.getTime()) / DAY;
   const showChildren = daysSpan <= 420;
+  const viewMonths = d3.timeMonths(viewStart, viewEnd);
 
   /* ---- scrubber geometry ---- */
   const totalSpan = Math.max(fullMax.getTime() - fullMin.getTime(), DAY);
@@ -343,10 +371,11 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           <svg className="absolute inset-0 w-full h-full pointer-events-none" fill="none">
             {childNodes.map((c) => {
               const pm = milestones.find((m) => m.id === c.parent);
-              if (!pm) return null;
+              const p = laid.pos.get(c.id);
+              if (!pm || !p) return null;
               const mx = tx(parseDate(pm.occurredAt));
-              const cx = tx(c.date);
-              const nodeTop = laid.laneTop(c.id) + (c.kind === 'imaging' ? 2 : 1);
+              const cx = p.x;
+              const nodeTop = p.y + (c.kind === 'imaging' ? 2 : 1);
               const my = AXIS_Y + 20;
               return (
                 <path
@@ -416,8 +445,10 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
 
         {/* child nodes: medication pills, labs, imaging card */}
         {showChildren && childNodes.map((c) => {
-          const x = tx(c.date);
-          const y = laid.laneTop(c.id);
+          const p = laid.pos.get(c.id);
+          if (!p) return null; // collapsed into the parent's "+N more" chip
+          const x = p.x;
+          const y = p.y;
           const sel = selectedId === c.id;
           const isImaging = c.kind === 'imaging';
 
@@ -446,10 +477,10 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           const Glyph = c.kind === 'medication' ? PillGlyph : FlaskGlyph;
           const accent = c.kind === 'medication';
           return (
-            <div key={c.id} className="absolute z-10" style={{ left: x, top: y, transform: 'translateX(-16px)' }}>
+            <div key={c.id} className="absolute z-10" style={{ left: p.flip ? x + 16 : x, top: y, transform: p.flip ? 'translateX(-100%)' : 'translateX(-16px)' }}>
               <motion.div
                 whileHover={{ scale: 1.06 }}
-                className="flex items-center gap-1.5 cursor-pointer"
+                className={`flex items-center gap-1.5 cursor-pointer ${p.flip ? 'flex-row-reverse' : ''}`}
                 role="button"
                 tabIndex={0}
                 aria-label={c.label}
@@ -464,11 +495,34 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-semibold text-[var(--color-ink)] leading-tight whitespace-nowrap max-w-[92px]">
+                <span className="text-[10px] font-semibold text-[var(--color-ink)] leading-tight truncate max-w-[104px]" title={c.label}>
                   {c.label}
                 </span>
               </motion.div>
             </div>
+          );
+        })}
+
+        {/* collapsed overflow per milestone: "+N more" zooms to that visit */}
+        {showChildren && Array.from(laid.overflow.entries()).map(([pid, n]) => {
+          const pm = milestones.find((m) => m.id === pid);
+          if (!pm || !n) return null;
+          const x = tx(parseDate(pm.occurredAt));
+          return (
+            <button
+              key={`ov-${pid}`}
+              type="button"
+              onClick={() => {
+                const t = parseDate(pm.occurredAt).getTime();
+                setViewStart(new Date(t - 30 * DAY));
+                setViewEnd(new Date(t + 30 * DAY));
+              }}
+              className="absolute z-10 px-2 py-0.5 rounded-full bg-white border border-[var(--color-border-hairline)] text-[9px] font-bold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
+              style={{ left: Math.min(x + 78, width - 64), top: laid.chipY + 6 }}
+              title="More events at this visit — click to zoom in"
+            >
+              +{n} more
+            </button>
           );
         })}
 
@@ -483,10 +537,10 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           <Plus className="w-4 h-4 text-[var(--color-ink)]" />
         </button>
 
-        {/* month labels along the bottom */}
-        {d3.timeMonths(viewStart, viewEnd).map((m: Date, i: number) => (
+        {/* month labels along the bottom (abbreviated + year when the span is long) */}
+        {viewMonths.map((m: Date, i: number) => (
           <span key={i} className="absolute bottom-2 text-[11px] font-medium text-[var(--color-ink-muted)]" style={{ left: tx(m) + 6 }}>
-            {d3.timeFormat('%B')(m)}
+            {viewMonths.length > 8 ? d3.timeFormat(m.getMonth() === 0 ? '%b %Y' : '%b')(m) : d3.timeFormat('%B')(m)}
           </span>
         ))}
       </div>
