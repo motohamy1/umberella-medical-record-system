@@ -19,6 +19,7 @@ export interface ModuleCardProps {
   children: React.ReactNode;
   className?: string;
   contentClassName?: string;
+  'data-testid'?: string;
 }
 
 export function ModuleCard({
@@ -30,9 +31,11 @@ export function ModuleCard({
   children,
   className,
   contentClassName,
+  'data-testid': dataTestId,
 }: ModuleCardProps) {
   return (
     <section
+      data-testid={dataTestId}
       className={clsx(
         'relative bg-[var(--color-surface-raised)] rounded-[var(--radius-card)]',
         'p-4 sm:p-5 shadow-[var(--shadow-raised)] flex flex-col',

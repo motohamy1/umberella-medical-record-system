@@ -53,3 +53,7 @@ AGENTS.md
 CONTEXT.md
 clinic-step1.png
 clinic-step2.png
+.data
+.data/store.json
+/.data
+/.data/

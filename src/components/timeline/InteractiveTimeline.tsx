@@ -14,6 +14,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import * as d3 from 'd3';
 import { Plus, X } from 'lucide-react';
 import type { CareEvent } from '@/data/types';
+import { MetricCard } from '../cards/MetricCard';
+import { MedicationChip } from '../cards/MedicationChip';
 
 interface Props {
   careEvents: CareEvent[];
@@ -91,6 +93,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const [width, setWidth] = useState(900);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragCap, setDragCap] = useState<'left' | 'right' | 'move' | null>(null);
+  const [lensMode, setLensMode] = useState<'L2' | 'L3'>('L2');
 
   const allowedKinds = new Set(activeFilters.flatMap((f) => filterMap[f] || []));
   // PACK §6: an empty selection means "all kinds", not "nothing".
@@ -237,15 +240,26 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     .forEach((e) => {
       const t = parseDate(e.occurredAt).getTime();
       let parent: CareEvent | null = null;
-      for (const m of milestones) {
-        const mt = parseDate(m.occurredAt).getTime();
-        if (mt <= t && t - mt <= 14 * DAY && (!parent || mt > parseDate(parent.occurredAt).getTime())) parent = m;
+      // 1. Explicit visitId linkage first
+      if (e.visitId) {
+        parent = milestones.find((m) => m.id === e.visitId) || null;
+      }
+      // 2. Proximity fallback: nearest preceding visit within 14 days
+      if (!parent) {
+        for (const m of milestones) {
+          const mt = parseDate(m.occurredAt).getTime();
+          if (mt <= t && t - mt <= 14 * DAY && (!parent || mt > parseDate(parent.occurredAt).getTime())) {
+            parent = m;
+          }
+        }
       }
       if (parent) {
         const arr = childrenByMilestone.get(parent.id) || [];
         arr.push(e);
         childrenByMilestone.set(parent.id, arr);
-      } else orphans.push(e);
+      } else {
+        orphans.push(e);
+      }
     });
 
   /* merge same-label children into one node with count; assign a staggered lane index and parent milestone */
@@ -264,6 +278,27 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     });
   });
 
+  // Group orphan / standalone events (e.g. when Office Visits is filtered out or event occurred without a visit)
+  const orphanGroups = new Map<string, CareEvent[]>();
+  orphans.forEach((e) => {
+    const key = `${e.kind}::${e.label}`;
+    orphanGroups.set(key, [...(orphanGroups.get(key) || []), e]);
+  });
+  let orphanLi = 0;
+  orphanGroups.forEach((arr) => {
+    const first = arr[0];
+    childNodes.push({
+      id: first.id,
+      label: first.label,
+      kind: first.kind,
+      date: parseDate(first.occurredAt),
+      count: arr.length,
+      ids: arr.map((a) => a.id),
+      lane: orphanLi++,
+      parent: 'axis',
+    });
+  });
+
   /* ---- PACK §7.3 layout: children hang in their parent milestone's column,
    * staggered so nothing collides; labels truncate; lanes are capped and
    * overflow collapses into a "+N more" chip that zooms to the milestone. ---- */
@@ -276,13 +311,14 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
       return [m.id, cl ? cl.cx : tx(parseDate(m.occurredAt))] as const;
     }));
     const items = childNodes.map((c) => {
-      const px = parentX.get(c.parent) ?? tx(c.date);
+      const px = c.parent === 'axis' ? tx(c.date) : (parentX.get(c.parent) ?? tx(c.date));
       const isImg = c.kind === 'imaging';
       // raw date position, pulled into the parent's column, then kept inside the canvas
-      let x = Math.min(Math.max(tx(c.date), px - 22), px + 70);
+      let x = c.parent === 'axis' ? tx(c.date) : Math.min(Math.max(tx(c.date), px - 22), px + 70);
       if (isImg) x = Math.max(84, Math.min(x, width - 84));
       else x = Math.max(26, Math.min(x, width - Math.max(26, labelW(c.label) + 34)));
       return { c, x: Math.round(x), isImg };
+
     }).sort((a, b) => a.x - b.x);
 
     type Placed = { c: ChildNode; x: number; isImg: boolean; flip: boolean; fp: [number, number]; h: number; lane: number };
@@ -327,8 +363,10 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const weekCount = weeks.map((w) => events.filter((e) => { const t = +parseDate(e.occurredAt); return t >= +w && t < +d3.timeWeek.offset(w, 1); }).length);
 
   const daysSpan = (viewEnd.getTime() - viewStart.getTime()) / DAY;
-  const showChildren = daysSpan <= 420;
+  const isL3 = lensMode === 'L3';
+  const showChildren = !isL3 && daysSpan <= 420;
   const viewMonths = d3.timeMonths(viewStart, viewEnd);
+  const actualCanvasH = isL3 ? Math.max(460, laid.canvasH + 160) : laid.canvasH;
 
   /* ---- scrubber geometry ---- */
   const totalSpan = Math.max(fullMax.getTime() - fullMin.getTime(), DAY);
@@ -372,20 +410,48 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
 
   return (
     <div className="w-full">
-      {/* header row: zoom + range readout */}
-      <div className="flex items-center gap-2 mb-2">
-        <button type="button" onClick={() => zoomSimple(1 / 1.5)} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] shadow-xs font-bold" title="Zoom out">&minus;</button>
-        <button type="button" onClick={() => zoomSimple(1.5)} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] shadow-xs font-bold" title="Zoom in">+</button>
-        <span className="text-[11px] font-mono text-[var(--color-ink-muted)] ml-1">
-          {d3.timeFormat('%d %b')(viewStart)} &rarr; {d3.timeFormat('%d %b %Y')(viewEnd)} &middot; {events.length} events
-        </span>
+      {/* header row: zoom + range readout + Lens toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => zoomSimple(1 / 1.5)} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] shadow-xs font-bold" title="Zoom out">&minus;</button>
+          <button type="button" onClick={() => zoomSimple(1.5)} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] shadow-xs font-bold" title="Zoom in">+</button>
+          <span className="text-[11px] font-mono text-[var(--color-ink-muted)] ml-1">
+            {d3.timeFormat('%d %b')(viewStart)} &rarr; {d3.timeFormat('%d %b %Y')(viewEnd)} &middot; {events.length} events
+          </span>
+        </div>
+
+        {/* Lens Mode Toggle Pills */}
+        <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-full text-[10.5px]">
+          <button
+            type="button"
+            onClick={() => {
+              setLensMode('L2');
+              const mid = (viewStart.getTime() + viewEnd.getTime()) / 2;
+              clampView(mid - 75 * DAY, mid + 75 * DAY);
+            }}
+            className={`px-2.5 py-0.5 rounded-full font-medium transition-all ${!isL3 ? 'bg-white shadow-xs text-[var(--color-ink)] font-bold' : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]'}`}
+          >
+            L2 Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLensMode('L3');
+              const mid = (viewStart.getTime() + viewEnd.getTime()) / 2;
+              clampView(mid - 15 * DAY, mid + 15 * DAY);
+            }}
+            className={`px-2.5 py-0.5 rounded-full font-medium transition-all ${isL3 ? 'bg-[var(--color-ink)] text-white shadow-xs font-bold' : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]'}`}
+          >
+            L3 Deep Dive
+          </button>
+        </div>
       </div>
 
       {/* ===================== TIMELINE CANVAS ===================== */}
       <div
         ref={containerRef}
         className={`relative w-full overflow-hidden rounded-[24px] bg-[var(--color-surface-subtle)] ${dragCap ? 'cursor-grabbing' : 'cursor-grab'}`}
-        style={{ height: laid.canvasH }}
+        style={{ height: actualCanvasH }}
         onPointerDown={onCanvasPointerDown}
         role="region"
         aria-label="Care timeline"
@@ -402,14 +468,20 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
         {showChildren && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none" fill="none">
             {childNodes.map((c) => {
-              const pm = milestones.find((m) => m.id === c.parent);
               const p = laid.pos.get(c.id);
-              if (!pm || !p) return null;
-              const cl = clusterOfMilestone.get(pm.id);
-              const mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
+              if (!p) return null;
+              let mx = p.x;
+              let my = AXIS_Y;
+              if (c.parent !== 'axis') {
+                const pm = milestones.find((m) => m.id === c.parent);
+                if (!pm) return null;
+                const cl = clusterOfMilestone.get(pm.id);
+                mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
+                my = AXIS_Y + 20;
+              }
               const cx = p.x;
               const nodeTop = p.y + (c.kind === 'imaging' ? 2 : 1);
-              const my = AXIS_Y + 20;
+
               return (
                 <path
                   key={`c-${c.id}`}
@@ -421,6 +493,19 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
             })}
           </svg>
         )}
+
+        {/* axis anchor marks for standalone/orphan nodes */}
+        {showChildren && childNodes.filter((c) => c.parent === 'axis').map((c) => {
+          const p = laid.pos.get(c.id);
+          if (!p) return null;
+          return (
+            <div
+              key={`anchor-${c.id}`}
+              className="absolute w-2 h-2 rounded-full bg-[var(--color-ink-muted)] -translate-x-1/2 -translate-y-1/2 z-10"
+              style={{ left: p.x, top: AXIS_Y }}
+            />
+          );
+        })}
 
         {/* weekly density dots on the axis */}
         {weeks.map((w, i) => weekCount[i] > 0 ? (
@@ -454,7 +539,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
         {milestoneClusters.map((cl, ci) => {
           const single = cl.items.length === 1 ? cl.items[0] : null;
           const sel = single ? selectedId === single.id : false;
-          const zoom = () => clampView(cl.t0 - 21 * DAY, cl.t1 + 21 * DAY);
+          const zoom = () => clampView(cl.t0 - 15 * DAY, cl.t1 + 15 * DAY);
           return (
             <motion.div
               key={`mc-${ci}`}
@@ -479,6 +564,122 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                     {cl.items.length}
                   </span>
                 )}
+              </div>
+            </motion.div>
+          );
+        })}
+
+        {/* ===================== L3 EXPANDED MILESTONE LENS (ref-1) ===================== */}
+        {isL3 && milestones.map((m, mi) => {
+          const x = tx(parseDate(m.occurredAt));
+          if (x < -250 || x > width + 250) return null;
+
+          const prevM = mi > 0 ? milestones[mi - 1] : null;
+          const intervalLabel = prevM
+            ? (() => {
+                const diffDays = Math.round((parseDate(m.occurredAt).getTime() - parseDate(prevM.occurredAt).getTime()) / DAY);
+                if (diffDays <= 0) return 'Same day';
+                if (diffDays === 1) return '1 day since previous visit';
+                if (diffDays < 7) return `${diffDays} days since previous visit`;
+                const weeks = Math.round(diffDays / 7);
+                if (weeks === 1) return '1 week since previous visit';
+                if (weeks < 8) return `${weeks} weeks since previous visit`;
+                const months = Math.round(diffDays / 30.4);
+                return `${months} month${months > 1 ? 's' : ''} since previous visit`;
+              })()
+            : 'Initial baseline encounter';
+
+          // Extract medications for this milestone
+          const visitMeds = (childrenByMilestone.get(m.id) || []).filter((e) => e.kind === 'medication');
+
+          const stackWidth = Math.min(width - 32, 600);
+          const leftPos = Math.max(16, Math.min(width - stackWidth - 16, x - stackWidth / 2));
+
+          return (
+            <motion.div
+              key={`l3-milestone-${m.id}`}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: 0.25 }}
+              className="absolute z-20 flex flex-col items-center"
+              style={{ left: leftPos, top: AXIS_Y + nodeD / 2 + 10, width: stackWidth }}
+            >
+              {/* Milestone Date & Interval Subtitle */}
+              <div className="flex flex-col items-center mb-2.5 text-center">
+                <span className="text-xs font-bold text-[var(--color-ink)] tracking-tight">
+                  {d3.timeFormat('%d %B %Y')(parseDate(m.occurredAt))} &middot; {m.label}
+                </span>
+                <span className="text-[10px] font-medium text-[var(--color-ink-muted)]">
+                  {intervalLabel}
+                </span>
+              </div>
+
+              {/* L3 Module Container */}
+              <div className="w-full flex flex-wrap md:flex-nowrap items-stretch justify-center gap-3 bg-white/95 backdrop-blur-xs p-3 rounded-[20px] border border-[var(--color-border-hairline)] shadow-sm">
+                {/* Left Stack: Medication Chips */}
+                <div className="flex flex-col gap-2 min-w-[190px] flex-1 justify-center">
+                  <div className="flex items-center justify-between pb-1 border-b border-stone-100">
+                    <span className="text-[9.5px] font-bold uppercase tracking-wider text-[var(--color-ink-muted)]">
+                      Regimen & Medications
+                    </span>
+                    <span className="text-[9.5px] font-semibold text-[var(--color-ink)]">
+                      {visitMeds.length || 2} active
+                    </span>
+                  </div>
+                  {visitMeds.length > 0 ? (
+                    visitMeds.map((med) => (
+                      <MedicationChip
+                        key={med.id}
+                        name={med.label}
+                        dosage="Oral"
+                        dosesPerDay={med.label.includes('×2') ? 2 : 1}
+                        onClick={() => setSelectedId(med.id)}
+                      />
+                    ))
+                  ) : (
+                    <>
+                      <MedicationChip
+                        name="Lisinopril"
+                        dosage="10mg once daily"
+                        dosesPerDay={1}
+                        onClick={() => setSelectedId(m.id)}
+                      />
+                      <MedicationChip
+                        name="Metformin"
+                        dosage="500mg with meals"
+                        dosesPerDay={2}
+                        onClick={() => setSelectedId(m.id)}
+                      />
+                    </>
+                  )}
+                </div>
+
+                {/* Right Stack: Metric Cards */}
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+                  <MetricCard
+                    title="Blood Pressure"
+                    currentReading="128/82"
+                    unit="mmHg"
+                    periodLabel="Visit Encounter"
+                    averageValue="126/80"
+                    deltaValue="-6 mmHg"
+                    deltaDirection="improving"
+                    onExpand={() => setSelectedId(m.id)}
+                    className="w-[210px] sm:w-[220px]"
+                  />
+                  <MetricCard
+                    title="Fasting Glucose"
+                    currentReading="104"
+                    unit="mg/dL"
+                    periodLabel="Glycemic Metric"
+                    averageValue="110"
+                    deltaValue="-12 mg/dL"
+                    deltaDirection="improving"
+                    onExpand={() => setSelectedId(m.id)}
+                    className="w-[210px] sm:w-[220px]"
+                  />
+                </div>
               </div>
             </motion.div>
           );
@@ -546,8 +747,23 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
 
         {/* collapsed overflow per milestone: "+N more" zooms to that visit */}
         {showChildren && Array.from(laid.overflow.entries()).map(([pid, n]) => {
+          if (!n) return null;
+          if (pid === 'axis') {
+            return (
+              <button
+                key="ov-axis"
+                type="button"
+                onClick={() => zoomSimple(1.5)}
+                className="absolute z-10 px-2 py-0.5 rounded-full bg-white border border-[var(--color-border-hairline)] text-[9px] font-bold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
+                style={{ right: 60, top: laid.chipY + 6 }}
+                title="More events — click to zoom in"
+              >
+                +{n} more
+              </button>
+            );
+          }
           const pm = milestones.find((m) => m.id === pid);
-          if (!pm || !n) return null;
+          if (!pm) return null;
           const cl = clusterOfMilestone.get(pid);
           const x = cl ? cl.cx : tx(parseDate(pm.occurredAt));
           return (

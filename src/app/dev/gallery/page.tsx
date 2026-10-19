@@ -18,6 +18,7 @@ import { MetricsStrip } from '@/components/cards/MetricsStrip';
 import { RecordRow } from '@/components/cards/RecordRow';
 import { RangeBar } from '@/components/cards/RangeBar';
 import { MedicationChip } from '@/components/cards/MedicationChip';
+import { ImagingThumbCard } from '@/components/cards/ImagingThumbCard';
 import { MetricCard } from '@/components/cards/MetricCard';
 import { TimelineNode } from '@/components/timeline/TimelineNode';
 import { Scrubber } from '@/components/timeline/Scrubber';
@@ -299,6 +300,32 @@ export default function DevGalleryPage() {
               <div className="pt-2">
                 <span className="text-xs text-[var(--color-ink-muted)] block mb-2 font-medium">Timeline Scrubber (ref-2)</span>
                 <Scrubber />
+              </div>
+
+              <div className="pt-4 border-t border-[var(--color-ink-soft)]/20">
+                <span className="text-xs text-[var(--color-ink-muted)] block mb-3 font-medium">
+                  ImagingThumbCard (§4.5 #13 — Modality chip top-left, dark round arrow button bottom-right)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-3xl">
+                  <ImagingThumbCard
+                    id="gal-img-1"
+                    modality="Echocardiogram"
+                    title="Transthoracic Echocardiogram (2D/Doppler)"
+                    occurredAt="2025-09-04T10:00:00.000Z"
+                    imagePath="/imaging/echo-hero-1.png"
+                    reportText="Mild left ventricular concentric hypertrophy. LVEF 60%."
+                    onClick={() => {}}
+                  />
+                  <ImagingThumbCard
+                    id="gal-img-2"
+                    modality="Ultrasound"
+                    title="Renal Duplex Ultrasound"
+                    occurredAt="2026-05-02T10:00:00.000Z"
+                    imagePath="/imaging/renal-us-hero.png"
+                    reportText="Normal bilateral kidney size and cortical echogenicity."
+                    onClick={() => {}}
+                  />
+                </div>
               </div>
             </div>
           </section>

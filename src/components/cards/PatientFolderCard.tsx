@@ -2,34 +2,112 @@
 
 /**
  * PatientFolderCard — Skeuomorphic folder card representing a patient on Provider Home (§6.2).
- * Shows back panel MRN tab, front card with avatar, name, sex/age, status badge,
- * last visit, and primary concern.
+ * Conforms faithfully to ref-5 folder silhouette with:
+ * 1. Back panel flap: Neutral cardstock silhouette with sloping top-left tab carrying MRN (RTL-mirrored).
+ * 2. Front pocket card in gray: Solid surface card holding patient avatar, untruncated name,
+ *    demographics, color-coded status badges (Critical=Red, Follow-up=Yellow, Stable=Green),
+ *    kebab menu, hairline divider, last visit date, primary concern, and workspace link.
  */
 
-import React from 'react';
-import Link from 'next/link';
+import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
-import { ArrowUpRight } from 'lucide-react';
+import {
+  MoreVertical,
+  ArrowUpRight,
+  Send,
+  Check,
+} from 'lucide-react';
 import type { Patient, PatientStatus } from '@/data/types';
+import { sendPatientInviteAction } from '@/data/actions';
+import { getDictionary, type Locale } from '@/i18n';
 
 export interface PatientFolderCardProps {
   patient: Patient;
   className?: string;
+  locale?: Locale;
+  onOpenWorkspace?: (patientId: string) => void;
 }
 
-export function PatientFolderCard({ patient, className }: PatientFolderCardProps) {
+export function PatientFolderCard({
+  patient,
+  className,
+  locale = 'en',
+  onOpenWorkspace,
+}: PatientFolderCardProps) {
+  const router = useRouter();
+  const dict = getDictionary(locale);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isMenuOpen]);
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+      return;
+    }
+    if (onOpenWorkspace) {
+      onOpenWorkspace(patient.id);
+    } else {
+      router.push(`/clinic/patients/${patient.id}`);
+    }
+  };
+
+  const handleSendInvite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await sendPatientInviteAction(patient.id);
+      if (res.success) {
+        setInviteSent(true);
+        setTimeout(() => setIsMenuOpen(false), 800);
+      }
+    } catch (err) {
+      console.error('Failed to send invite:', err);
+    }
+  };
+
+  // Status badge colors: Critical = Red, Follow-up = Yellow, Stable = Green
   const getStatusBadge = (status: PatientStatus) => {
     switch (status) {
       case 'Critical':
-        return 'bg-[var(--color-ink)] text-[var(--color-white)]';
-      case 'Needs review':
-        return 'border border-[var(--color-ink)] text-[var(--color-ink)] bg-transparent';
+        return 'bg-red-600 text-white font-bold shadow-2xs';
       case 'Follow-up':
-        return 'bg-[var(--color-accent)] text-[var(--color-ink)] font-semibold';
-      case 'New':
+        return 'bg-yellow-400 text-[var(--color-ink)] font-bold shadow-2xs';
       case 'Stable':
+        return 'bg-emerald-600 text-white font-semibold shadow-2xs';
+      case 'Needs review':
+        return 'border border-amber-600 text-amber-800 bg-amber-50 font-semibold shadow-2xs';
+      case 'New':
       default:
-        return 'bg-[var(--color-surface)] text-[var(--color-ink)]';
+        return 'bg-[var(--color-white)] text-[var(--color-ink)] font-semibold border border-[var(--color-ink-soft)]/30 shadow-2xs';
+    }
+  };
+
+  const getStatusLabel = (status: PatientStatus) => {
+    switch (status) {
+      case 'Critical':
+        return dict.folder.statusCritical;
+      case 'Needs review':
+        return dict.folder.statusNeedsReview;
+      case 'Follow-up':
+        return dict.folder.statusFollowUp;
+      case 'New':
+        return dict.folder.statusNew;
+      case 'Stable':
+        return dict.folder.statusStable;
+      default:
+        return status;
     }
   };
 
@@ -41,58 +119,145 @@ export function PatientFolderCard({ patient, className }: PatientFolderCardProps
 
   return (
     <div
+      onClick={handleCardClick}
       className={clsx(
-        'relative group flex flex-col rounded-[var(--radius-card)] transition-transform duration-150 hover:-translate-y-0.5',
+        'group relative flex flex-col cursor-pointer select-none transition-all duration-200 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ink)]',
         className
       )}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          router.push(`/clinic/patients/${patient.id}`);
+        }
+      }}
+      aria-label={`Patient folder for ${patient.name}, MRN ${patient.mrn}`}
     >
-      {/* Back tab: MRN */}
-      <div className="flex items-center ps-4">
-        <div className="px-3 py-1 bg-[var(--color-surface)] rounded-t-lg border-t border-x border-[var(--color-ink-soft)]/30 text-[10px] font-mono font-bold text-[var(--color-ink-muted)]">
-          {patient.mrn}
-        </div>
+      {/* ── LAYER 1: BACK FOLDER FLAP (Authentic ref-5 folder silhouette) ── */}
+      <svg
+        className="absolute inset-0 w-full h-full text-[var(--color-frame)] drop-shadow-2xs pointer-events-none rtl:scale-x-[-1]"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M 0 94 Q 0 100 6 100 L 94 100 Q 100 100 100 94 L 100 16 Q 100 12 94 12 L 54 12 C 47 12 43 0 37 0 L 6 0 Q 0 0 0 5 Z"
+          fill="currentColor"
+          stroke="var(--color-ink-soft)"
+          strokeOpacity="0.4"
+          strokeWidth="0.75"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      {/* ── MRN Printed on Top-Left Back Tab (Mirrors in RTL) ── */}
+      <div className="absolute top-1 start-3 z-10 font-mono text-[10px] font-bold text-[var(--color-ink)] tracking-wider whitespace-nowrap">
+        {patient.mrn}
       </div>
 
-      {/* Main Front Folder Card */}
-      <div className="relative bg-[var(--color-surface-raised)] rounded-[var(--radius-card)] p-4 shadow-sm border border-[var(--color-ink-soft)]/25 flex flex-col justify-between min-h-[168px]">
-        {/* Top: Avatar, Name & Status */}
+      {/* ── LAYER 2: FRONT POCKET CARD IN GRAY (ref-5 front pocket & clinical data) ── */}
+      <div className="relative mt-6 bg-[var(--color-surface)] rounded-[var(--radius-card)] p-3.5 sm:p-4 shadow-xs border border-[var(--color-ink-soft)]/30 flex flex-col justify-between z-20 min-h-[168px] transition-all duration-200 group-hover:shadow-md">
         <div>
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-full bg-[var(--color-white)] border border-[var(--color-ink-soft)]/20 flex items-center justify-center font-bold text-xs text-[var(--color-ink)] shrink-0 shadow-xs">
+          {/* Row 1: Avatar, Full Patient Name, and Kebab Menu */}
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {/* Initials Avatar */}
+              <div className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full bg-[var(--color-white)] border border-[var(--color-ink-soft)]/35 flex items-center justify-center font-bold text-[11px] text-[var(--color-ink)] shrink-0 shadow-2xs">
                 {getInitials(patient.name)}
               </div>
-              <div className="min-w-0">
-                <h3 className="font-bold text-sm text-[var(--color-ink)] truncate leading-tight">
+              {/* Patient Full Name with full horizontal space */}
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-[13px] text-[var(--color-ink)] truncate leading-tight group-hover:text-[var(--color-ink)]" title={patient.name}>
                   {patient.name}
                 </h3>
-                <span className="text-[11px] text-[var(--color-ink-muted)]">
-                  {patient.sex} · {patient.age}y
-                </span>
               </div>
             </div>
 
+            {/* Kebab Menu Button */}
+            <div className="relative shrink-0" ref={menuRef}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMenuOpen((prev) => !prev);
+                }}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-white)] transition-colors"
+                aria-label="Patient options"
+              >
+                <MoreVertical className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isMenuOpen && (
+                <div
+                  className="absolute end-0 top-7 w-44 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 shadow-lg py-1.5 z-50 text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMenuOpen(false);
+                      router.push(`/clinic/patients/${patient.id}`);
+                    }}
+                    className="w-full px-3 py-1.5 text-start font-medium text-[var(--color-ink)] hover:bg-[var(--color-surface)] flex items-center gap-2"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-ink-muted)]" />
+                    <span>{dict.folder.openWorkspace}</span>
+                  </button>
+
+                  {!patient.userId && (
+                    <button
+                      type="button"
+                      onClick={handleSendInvite}
+                      disabled={inviteSent}
+                      className="w-full px-3 py-1.5 text-start font-medium text-[var(--color-ink)] hover:bg-[var(--color-surface)] flex items-center gap-2"
+                    >
+                      {inviteSent ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700 font-bold">Invite sent</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5 text-[var(--color-ink-muted)]" />
+                          <span>{dict.folder.sendInvite}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Demographics on Left, Status Badge on Right */}
+          <div className="flex items-center justify-between gap-1.5 mt-1.5 ps-[36px]">
+            <span className="text-[11px] text-[var(--color-ink-muted)] leading-none">
+              {patient.sex} · {patient.age}y
+            </span>
             <span
               className={clsx(
-                'px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-semibold shrink-0 select-none',
+                'px-2 py-0.5 rounded-[var(--radius-pill)] text-[9.5px] select-none shrink-0 tracking-tight leading-none font-semibold',
                 getStatusBadge(patient.status)
               )}
             >
-              {patient.status}
+              {getStatusLabel(patient.status)}
             </span>
           </div>
 
           {/* Hairline divider */}
-          <div className="my-2.5 border-t border-[var(--color-ink-soft)]/15" />
+          <div className="my-2.5 border-t border-[var(--color-ink-soft)]/20" />
 
-          {/* Details: Last visit & Primary concern */}
+          {/* Two Clinical Rows: Last visit & Primary concern */}
           <div className="space-y-1 text-xs">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-[var(--color-ink-muted)]">Last visit:</span>
-              <span className="font-medium text-[var(--color-ink)]">{patient.lastVisitDate}</span>
+              <span className="text-[var(--color-ink-muted)]">{dict.folder.lastVisit}</span>
+              <span className="font-semibold text-[var(--color-ink)]">{patient.lastVisitDate || 'None'}</span>
             </div>
             <div className="flex items-start justify-between text-[11px] gap-2">
-              <span className="text-[var(--color-ink-muted)] shrink-0">Concern:</span>
+              <span className="text-[var(--color-ink-muted)] shrink-0">{dict.folder.primaryConcern}</span>
               <span className="font-medium text-[var(--color-ink)] text-end truncate">
                 {patient.primaryConcern}
               </span>
@@ -100,15 +265,15 @@ export function PatientFolderCard({ patient, className }: PatientFolderCardProps
           </div>
         </div>
 
-        {/* Bottom Action: Open Workspace */}
-        <div className="pt-2 mt-2 border-t border-[var(--color-ink-soft)]/15 flex justify-end">
-          <Link
-            href={`/clinic/patients/${patient.id}`}
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--color-ink)] hover:underline"
-          >
-            <span>Open workspace</span>
-            <ArrowUpRight className="w-3 h-3" />
-          </Link>
+        {/* Base Row: Folder Active & Quick Workspace Link */}
+        <div className="pt-2 mt-2 border-t border-[var(--color-ink-soft)]/15 flex items-center justify-between text-[10px] text-[var(--color-ink-muted)]">
+          <span className="font-mono text-[9px] uppercase tracking-wider text-[var(--color-ink-muted)]">
+            FOLDER ACTIVE
+          </span>
+          <span className="inline-flex items-center gap-0.5 font-bold text-[var(--color-ink)] group-hover:underline">
+            <span>{dict.schedule.openWorkspace}</span>
+            <ArrowUpRight className="w-2.5 h-2.5" />
+          </span>
         </div>
       </div>
     </div>

@@ -12,9 +12,45 @@
  */
 
 import React, { useState, useEffect, useCallback, use, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
-import { fetchPatientByIdAction, fetchPatientEventsAction } from '@/data/actions';
-import type { Patient, CareEvent, RecordKind } from '@/data/types';
+import Link from 'next/link';
+import {
+  fetchPatientByIdAction,
+  fetchPatientEventsAction,
+  fetchPatientVitalsAction,
+  fetchPatientAllergiesAction,
+  fetchPatientLabsAction,
+  createCareEventAction,
+  fetchPatientMedicationsAction,
+  createMedicationAction,
+  updateMedicationStatusAction,
+  updateMedicationDoseAction,
+  fetchPatientVisitsAction,
+  createVisitAction,
+  updateVisitStageAction,
+  updateVisitNotesAction,
+  createLabResultAction,
+  markLabReviewedAction,
+  fetchPatientImagingAction,
+  createImagingStudyAction,
+  fetchPatientGeneticsAction,
+  createGeneticFindingAction,
+  createAllergyAction,
+  updateAllergyAction,
+} from '@/data/actions';
+import type {
+  Patient,
+  CareEvent,
+  RecordKind,
+  VitalObservation,
+  Allergy,
+  LabResult,
+  Medication,
+  MedicationStatus,
+  Visit,
+  VisitStage,
+  ImagingStudy,
+  GeneticFinding,
+} from '@/data/types';
 import { PaperPatientWorkspace } from '@/components/patient/PaperPatientWorkspace';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
 import { ArrowLeft } from 'lucide-react';
@@ -37,12 +73,18 @@ function PatientWorkspaceSkeleton() {
 }
 
 function PatientWorkspaceContent({ params }: PatientPageProps) {
-  const router = useRouter();
   const resolvedParams = use(params);
   const patientId = resolvedParams.id;
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [careEvents, setCareEvents] = useState<CareEvent[]>([]);
+  const [vitals, setVitals] = useState<VitalObservation[]>([]);
+  const [allergies, setAllergies] = useState<Allergy[]>([]);
+  const [labs, setLabs] = useState<LabResult[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [imaging, setImaging] = useState<ImagingStudy[]>([]);
+  const [genetics, setGenetics] = useState<GeneticFinding[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddEntryOpen, setIsAddEntryOpen] = useState(false);
 
@@ -54,12 +96,26 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [pt, events] = await Promise.all([
+      const [pt, events, vitalsData, allergiesData, labsData, medsData, visitsData, imagingData, geneticsData] = await Promise.all([
         fetchPatientByIdAction(patientId),
         fetchPatientEventsAction(patientId),
+        fetchPatientVitalsAction(patientId),
+        fetchPatientAllergiesAction(patientId),
+        fetchPatientLabsAction(patientId),
+        fetchPatientMedicationsAction(patientId),
+        fetchPatientVisitsAction(patientId),
+        fetchPatientImagingAction(patientId),
+        fetchPatientGeneticsAction(patientId),
       ]);
       setPatient(pt);
       setCareEvents(events);
+      setVitals(vitalsData);
+      setAllergies(allergiesData);
+      setLabs(labsData);
+      setMedications(medsData);
+      setVisits(visitsData);
+      setImaging(imagingData);
+      setGenetics(geneticsData);
     } catch (err) {
       console.error('Failed to load patient workspace:', err);
     } finally {
@@ -71,30 +127,232 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
     loadData();
   }, [loadData]);
 
-  const handleAddEntry = (e: React.FormEvent) => {
+  const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!entryLabel) return;
 
-    const newEvent: CareEvent = {
-      id: `ce-${Date.now()}`,
-      orgId: patient?.orgId || 'org-demo',
-      patientId,
-      kind: entryKind,
-      label: entryLabel,
-      summary: entrySummary || 'Recorded by clinician',
-      occurredAt: '14 Oct 2026',
-      source: 'doctor',
-      createdBy: 'Dr. Tarek',
-    };
+    try {
+      const todayFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const res = await createCareEventAction({
+        patientId,
+        kind: entryKind,
+        label: entryLabel,
+        summary: entrySummary || 'Recorded by clinician',
+        occurredAt: todayFormatted,
+        source: 'doctor',
+        createdBy: 'Dr. Tarek',
+      });
 
-    setCareEvents((prev) => [newEvent, ...prev]);
+      if (res.success && res.data) {
+        setCareEvents((prev) => [res.data!, ...prev]);
+      } else {
+        // Fallback local update
+        const fallbackEvent: CareEvent = {
+          id: `ce-${Date.now()}`,
+          orgId: patient?.orgId || 'org-nile',
+          patientId,
+          kind: entryKind,
+          label: entryLabel,
+          summary: entrySummary || 'Recorded by clinician',
+          occurredAt: todayFormatted,
+          source: 'doctor',
+          createdBy: 'Dr. Tarek',
+        };
+        setCareEvents((prev) => [fallbackEvent, ...prev]);
+      }
+    } catch (err) {
+      console.error('Failed to create care event:', err);
+    }
+
     setIsAddEntryOpen(false);
     setEntryLabel('');
     setEntrySummary('');
   };
 
+  const handleStartMedication = async (newMed: {
+    name: string;
+    strength: string;
+    dosesPerDay: number;
+    route: string;
+    instructions?: string;
+  }) => {
+    const res = await createMedicationAction({
+      patientId,
+      ...newMed,
+    });
+    if (res.success && res.data) {
+      setMedications((prev) => [res.data!, ...prev]);
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleChangeMedicationDose = async (
+    medId: string,
+    newStrength: string,
+    dosesPerDay: number,
+    reason: string
+  ) => {
+    const res = await updateMedicationDoseAction(medId, newStrength, dosesPerDay, reason);
+    if (res.success && res.data) {
+      setMedications((prev) => prev.map((m) => (m.id === medId ? res.data! : m)));
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleUpdateMedicationStatus = async (
+    medId: string,
+    status: MedicationStatus,
+    reason?: string
+  ) => {
+    const res = await updateMedicationStatusAction(medId, status, reason);
+    if (res.success && res.data) {
+      setMedications((prev) => prev.map((m) => (m.id === medId ? res.data! : m)));
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleRecordVisit = async (newVisit: {
+    title: string;
+    visitType: string;
+    reason: string;
+    notes?: string;
+    plan?: string;
+    occurredAt?: string;
+  }) => {
+    const res = await createVisitAction({
+      patientId,
+      ...newVisit,
+    });
+    if (res.success && res.data) {
+      setVisits((prev) => [res.data!, ...prev]);
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleUpdateVisitStage = async (visitId: string, stage: VisitStage, notes?: string) => {
+    const res = await updateVisitStageAction(visitId, stage, notes);
+    if (res.success && res.data) {
+      setVisits((prev) => prev.map((v) => (v.id === visitId ? res.data! : v)));
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleUpdateVisitNotes = async (
+    visitId: string,
+    data: { notes?: string; plan?: string; followUpDate?: string }
+  ) => {
+    const res = await updateVisitNotesAction(visitId, data);
+    if (res.success && res.data) {
+      setVisits((prev) => prev.map((v) => (v.id === visitId ? res.data! : v)));
+    }
+  };
+
+  const handleRecordLab = async (newLab: {
+    testName: string;
+    value: string;
+    unit: string;
+    referenceLow?: number;
+    referenceHigh?: number;
+    status?: 'normal' | 'borderline' | 'abnormal' | 'critical';
+    occurredAt?: string;
+  }) => {
+    const res = await createLabResultAction({
+      patientId,
+      ...newLab,
+    });
+    if (res.success && res.data) {
+      setLabs((prev) => [res.data!, ...prev]);
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleMarkLabReviewed = async (labId: string) => {
+    const res = await markLabReviewedAction(labId, 'Dr. Tarek');
+    if (res.success && res.data) {
+      setLabs((prev) => prev.map((l) => (l.id === labId ? res.data! : l)));
+    }
+  };
+
+  const handleAddAllergy = async (newAllergy: {
+    substance: string;
+    reaction: string;
+    severity: 'mild' | 'moderate' | 'severe' | 'critical';
+    status?: string;
+  }) => {
+    const res = await createAllergyAction({
+      patientId,
+      ...newAllergy,
+    });
+    if (res.success && res.data) {
+      setAllergies((prev) => [res.data!, ...prev]);
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleUpdateAllergy = async (updated: {
+    allergyId: string;
+    substance?: string;
+    reaction?: string;
+    severity?: 'mild' | 'moderate' | 'severe' | 'critical';
+    status?: string;
+  }) => {
+    const res = await updateAllergyAction(updated);
+    if (res.success && res.data) {
+      setAllergies((prev) => prev.map((a) => (a.id === updated.allergyId ? res.data! : a)));
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
+  const handleAddGeneticFinding = async (newFinding: {
+    finding: string;
+    sourceDocument?: string;
+    occurredAt?: string;
+    interpretation?: string;
+  }) => {
+    const res = await createGeneticFindingAction({
+      patientId,
+      ...newFinding,
+    });
+    if (res.success && res.data) {
+      setGenetics((prev) => [res.data!, ...prev]);
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
   if (isLoading) {
     return <PatientWorkspaceSkeleton />;
+  }
+
+  // If patient not found and not the demo fallback
+  if (!patient && patientId !== 'p-tiffany') {
+    return (
+      <div className="min-h-screen bg-[var(--color-canvas)] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center text-[var(--color-ink-muted)] mb-4">
+          <ArrowLeft className="w-5 h-5" />
+        </div>
+        <h2 className="text-xl font-bold text-[var(--color-ink)] mb-1">
+          Patient Record Not Found
+        </h2>
+        <p className="text-xs text-[var(--color-ink-muted)] mb-6 max-w-sm">
+          No clinical record matches patient ID &quot;{patientId}&quot;. Please return to the clinic directory.
+        </p>
+        <Link
+          href="/clinic"
+          className="px-5 py-2.5 rounded-full bg-[var(--color-ink)] text-white text-xs font-bold hover:bg-black transition-all shadow-xs"
+        >
+          Return to Patients
+        </Link>
+      </div>
+    );
   }
 
   // Fallback demo patient if specific ID not found
@@ -121,7 +379,35 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
       <PaperPatientWorkspace
         patient={activePatient}
         careEvents={careEvents}
+        vitals={vitals}
+        allergies={allergies}
+        labs={labs}
+        medications={medications}
+        visits={visits}
         onAddEntry={() => setIsAddEntryOpen(true)}
+        onStartMedication={handleStartMedication}
+        onChangeMedicationDose={handleChangeMedicationDose}
+        onUpdateMedicationStatus={handleUpdateMedicationStatus}
+        onRecordVisit={handleRecordVisit}
+        onUpdateVisitStage={handleUpdateVisitStage}
+        onUpdateVisitNotes={handleUpdateVisitNotes}
+        onRecordLab={handleRecordLab}
+        onMarkLabReviewed={handleMarkLabReviewed}
+        imaging={imaging}
+        genetics={genetics}
+        onAddAllergy={handleAddAllergy}
+        onUpdateAllergy={handleUpdateAllergy}
+        onAddGeneticFinding={handleAddGeneticFinding}
+        onUploadStudy={async (newStudy) => {
+          const res = await createImagingStudyAction({
+            patientId,
+            ...newStudy,
+          });
+          if (res.success && res.data) {
+            setImaging((prev) => [res.data!, ...prev]);
+            await loadData();
+          }
+        }}
       />
 
       {/* Add Observation / Clinical Note Sheet */}
