@@ -9,7 +9,7 @@
  *   rounded caps. Drag the window to pan, drag caps to resize the period, wheel to zoom.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as d3 from 'd3';
 import { Plus, X } from 'lucide-react';
@@ -132,14 +132,24 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const xScale = d3.scaleTime().domain([viewStart, viewEnd]).range([36, Math.max(width - 70, 72)]);
   const tx = (d: Date) => xScale(d);
 
-  const totalSpanForZoom = () => Math.max(fullMax.getTime() - fullMin.getTime(), DAY);
+  /* Keep the view over the data: never span more than the history + a 2-month
+   * margin, and never slide into months that hold no events. */
+  const clampView = useCallback((s: number, e: number) => {
+    const lo = fullMin.getTime() - 30 * DAY;
+    const hi = fullMax.getTime() + 15 * DAY;
+    let span = Math.min(e - s, hi - lo);
+    span = Math.max(5 * DAY, span);
+    let ns = s, ne = s + span;
+    if (ns < lo) { ns = lo; ne = lo + span; }
+    if (ne > hi) { ne = hi; ns = hi - span; }
+    setViewStart(new Date(ns));
+    setViewEnd(new Date(ne));
+  }, [boundsKey]);
 
   const zoomSimple = (factor: number) => {
     const mid = (viewStart.getTime() + viewEnd.getTime()) / 2;
     const span = (viewEnd.getTime() - viewStart.getTime()) / factor;
-    const clamped = Math.max(5 * DAY, Math.min(span, totalSpanForZoom() * 1.6));
-    setViewStart(new Date(mid - clamped / 2));
-    setViewEnd(new Date(mid + clamped / 2));
+    clampView(mid - span / 2, mid + span / 2);
   };
 
   /* wheel zoom on canvas */
@@ -153,11 +163,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
       const factor = e.deltaY < 0 ? 1.25 : 1 / 1.25;
       const anchor = xScale.invert(px).getTime();
       const s = viewStart.getTime(), en = viewEnd.getTime();
-      const ns = anchor - (anchor - s) / factor;
-      const ne = anchor + (en - anchor) / factor;
-      if (ne - ns < 5 * DAY || ne - ns > (fullMax.getTime() - fullMin.getTime()) * 1.6) return;
-      setViewStart(new Date(ns));
-      setViewEnd(new Date(ne));
+      clampView(anchor - (anchor - s) / factor, anchor + (en - anchor) / factor);
     };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
@@ -174,8 +180,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
       if (!p) return;
       const msPerPx = (p.e - p.s) / Math.max(width - 110, 1);
       const shift = -(ev2.clientX - p.x) * msPerPx;
-      setViewStart(new Date(p.s + shift));
-      setViewEnd(new Date(p.e + shift));
+      clampView(p.s + shift, p.e + shift);
     };
     const onUp = () => {
       panFrom.current = null;
@@ -200,6 +205,29 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
 
   /* ---- layout: milestones + assigned children (nearest previous milestone within 14d) ---- */
   const milestones = events.filter((e) => e.kind === 'visit').sort((a, b) => +parseDate(a.occurredAt) - +parseDate(b.occurredAt));
+
+  /* PACK §7.3: node diameter follows px/day (40/34/28), and milestones closer
+   * than 1.2 diameters merge into one cluster node with a count badge. */
+  const pxPerDay = Math.max(width - 110, 120) / Math.max((viewEnd.getTime() - viewStart.getTime()) / DAY, 1);
+  const nodeD = pxPerDay < 1.5 ? 28 : pxPerDay < 6 ? 34 : 40;
+  const milestoneClusters = (() => {
+    const out: { items: CareEvent[]; cx: number; t0: number; t1: number }[] = [];
+    for (const m of milestones) {
+      const x = tx(parseDate(m.occurredAt));
+      const t = parseDate(m.occurredAt).getTime();
+      const last = out[out.length - 1];
+      if (last && x - last.cx < nodeD * 1.2) {
+        last.items.push(m);
+        last.t1 = Math.max(last.t1, t);
+        last.cx = (last.cx * (last.items.length - 1) + x) / last.items.length;
+      } else {
+        out.push({ items: [m], cx: x, t0: t, t1: t });
+      }
+    }
+    return out;
+  })();
+  const clusterOfMilestone = new Map(milestoneClusters.flatMap((cl) => cl.items.map((m) => [m.id, cl] as const)));
+
   const orphans: CareEvent[] = [];
   const childrenByMilestone = new Map<string, CareEvent[]>();
   events
@@ -241,7 +269,10 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const MAX_LANES = 2;
   const labelW = (label: string) => Math.min(MAX_LABEL_W, label.length * 6.0);
   const laid = (() => {
-    const parentX = new Map(milestones.map((m) => [m.id, tx(parseDate(m.occurredAt))] as const));
+    const parentX = new Map(milestones.map((m) => {
+      const cl = clusterOfMilestone.get(m.id);
+      return [m.id, cl ? cl.cx : tx(parseDate(m.occurredAt))] as const;
+    }));
     const items = childNodes.map((c) => {
       const px = parentX.get(c.parent) ?? tx(c.date);
       const isImg = c.kind === 'imaging';
@@ -317,8 +348,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
       const msPerPx = totalSpan / rect.width;
       const dx = (ev2.clientX - startX) * msPerPx;
       if (mode === 'move') {
-        setViewStart(new Date(s0 + dx));
-        setViewEnd(new Date(e0 + dx));
+        clampView(s0 + dx, e0 + dx);
       } else if (mode === 'left') {
         const ns = Math.min(s0 + dx, e0 - 5 * DAY);
         setViewStart(new Date(Math.max(ns, fullMin.getTime() - 60 * DAY)));
@@ -373,7 +403,8 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
               const pm = milestones.find((m) => m.id === c.parent);
               const p = laid.pos.get(c.id);
               if (!pm || !p) return null;
-              const mx = tx(parseDate(pm.occurredAt));
+              const cl = clusterOfMilestone.get(pm.id);
+              const mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
               const cx = p.x;
               const nodeTop = p.y + (c.kind === 'imaging' ? 2 : 1);
               const my = AXIS_Y + 20;
@@ -416,28 +447,36 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           />
         ))}
 
-        {/* milestones: neon circles with document glyph, ON the axis */}
-        {milestones.map((m) => {
-          const x = tx(parseDate(m.occurredAt));
-          const sel = selectedId === m.id;
+        {/* milestones: neon circles with document glyph, ON the axis;
+            close visits merge into a counted cluster that zooms on click (§7.3) */}
+        {milestoneClusters.map((cl, ci) => {
+          const single = cl.items.length === 1 ? cl.items[0] : null;
+          const sel = single ? selectedId === single.id : false;
+          const zoom = () => clampView(cl.t0 - 21 * DAY, cl.t1 + 21 * DAY);
           return (
             <motion.div
-              key={m.id}
+              key={`mc-${ci}`}
               whileHover={{ scale: 1.08 }}
               className="absolute -translate-x-1/2 cursor-pointer z-20 focus:outline-none rounded-full"
-              style={{ left: x, top: AXIS_Y - 20 }}
+              style={{ left: cl.cx, top: AXIS_Y - nodeD / 2 }}
               tabIndex={0}
               role="button"
-              aria-label={m.label}
-              onClick={() => setSelectedId((p) => (p === m.id ? null : m.id))}
-              onDoubleClick={() => {
-                const t = parseDate(m.occurredAt).getTime();
-                setViewStart(new Date(t - 21 * DAY));
-                setViewEnd(new Date(t + 21 * DAY));
-              }}
+              aria-label={single ? single.label : `${cl.items.length} visits — click to zoom in`}
+              onClick={() => (single ? setSelectedId((p) => (p === single.id ? null : single.id)) : zoom())}
+              onDoubleClick={zoom}
             >
-              <div className={`w-10 h-10 rounded-full bg-[var(--color-accent-neon)] flex items-center justify-center shadow-md transition-all ${sel ? 'ring-4 ring-[var(--color-accent-neon)]/40 ring-offset-2 ring-offset-[var(--color-surface-subtle)]' : ''}`}>
-                <DocGlyph className="w-5 h-5 text-[var(--color-ink)]" />
+              <div
+                className={`relative rounded-full bg-[var(--color-accent-neon)] flex items-center justify-center shadow-md transition-all ${sel ? 'ring-4 ring-[var(--color-accent-neon)]/40 ring-offset-2 ring-offset-[var(--color-surface-subtle)]' : ''}`}
+                style={{ width: nodeD, height: nodeD }}
+              >
+                <div className="text-[var(--color-ink)]" style={{ width: nodeD * 0.52, height: nodeD * 0.52 }}>
+                  <DocGlyph className="w-full h-full" />
+                </div>
+                {!single && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--color-ink)] text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                    {cl.items.length}
+                  </span>
+                )}
               </div>
             </motion.div>
           );
@@ -507,15 +546,15 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
         {showChildren && Array.from(laid.overflow.entries()).map(([pid, n]) => {
           const pm = milestones.find((m) => m.id === pid);
           if (!pm || !n) return null;
-          const x = tx(parseDate(pm.occurredAt));
+          const cl = clusterOfMilestone.get(pid);
+          const x = cl ? cl.cx : tx(parseDate(pm.occurredAt));
           return (
             <button
               key={`ov-${pid}`}
               type="button"
               onClick={() => {
-                const t = parseDate(pm.occurredAt).getTime();
-                setViewStart(new Date(t - 30 * DAY));
-                setViewEnd(new Date(t + 30 * DAY));
+                if (cl) clampView(cl.t0 - 30 * DAY, cl.t1 + 30 * DAY);
+                else { const t = parseDate(pm.occurredAt).getTime(); clampView(t - 30 * DAY, t + 30 * DAY); }
               }}
               className="absolute z-10 px-2 py-0.5 rounded-full bg-white border border-[var(--color-border-hairline)] text-[9px] font-bold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
               style={{ left: Math.min(x + 78, width - 64), top: laid.chipY + 6 }}
