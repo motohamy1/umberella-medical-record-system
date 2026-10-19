@@ -22,7 +22,7 @@ export function PaperPatientWorkspace({
   const [activeTab, setActiveTab] = useState<'Overview' | 'AI Analysis' | 'Visits' | 'Labs' | 'Imaging' | 'Genetics'>('Overview');
 
   // Filter pills state
-  const [activeFilters, setActiveFilters] = useState<string[]>(['Office Visits', 'Medications', 'Labs']);
+  const [activeFilters, setActiveFilters] = useState<string[]>(['Office Visits', 'Medications', 'Labs', 'Procedures', 'Hospitalizations', 'Imaging']);
 
   // Selected event on timeline (for interactive preview popover)
   const [selectedEventId, setSelectedEventId] = useState<string | null>('mri-1');

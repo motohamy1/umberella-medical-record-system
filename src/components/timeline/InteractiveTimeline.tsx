@@ -85,7 +85,7 @@ function FlaskGlyph({ className }: { className?: string }) {
 
 const AXIS_Y = 52;
 
-export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['Office Visits', 'Medications', 'Labs'] }: Props) {
+export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['Office Visits', 'Medications', 'Labs', 'Procedures', 'Hospitalizations', 'Imaging'] }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
@@ -93,8 +93,10 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const [dragCap, setDragCap] = useState<'left' | 'right' | 'move' | null>(null);
 
   const allowedKinds = new Set(activeFilters.flatMap((f) => filterMap[f] || []));
+  // PACK §6: an empty selection means "all kinds", not "nothing".
+  const isVisible = (k: CareEvent['kind']) => allowedKinds.size === 0 || allowedKinds.has(k);
   const source = careEvents.length ? careEvents : fallback;
-  const events = source.filter((e) => allowedKinds.has(e.kind));
+  const events = source.filter((e) => isVisible(e.kind));
 
   const allDates = events.map((e) => parseDate(e.occurredAt).getTime());
   const fullMin = allDates.length ? new Date(Math.min(...allDates)) : new Date();
