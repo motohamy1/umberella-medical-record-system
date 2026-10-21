@@ -2,10 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity, MessageSquare, FileCode, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { InteractiveTimeline } from '@/components/timeline/InteractiveTimeline';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
+import { CommunicationModal } from '@/components/communication/CommunicationModal';
+import { FHIRInteroperabilityModal } from '@/components/fhir/FHIRInteroperabilityModal';
+import { ComplianceCenterModal } from '@/components/compliance/ComplianceCenterModal';
 import type {
   Patient,
   CareEvent,
@@ -26,6 +29,7 @@ import { LabsTabView } from './LabsTabView';
 import { ImagingTabView } from './ImagingTabView';
 import { AllergiesTabView } from './AllergiesTabView';
 import { GeneticsTabView } from './GeneticsTabView';
+import { AIAnalyticsTabView } from './AIAnalyticsTabView';
 import { PatientContextBar } from './PatientContextBar';
 
 interface PaperPatientWorkspaceProps {
@@ -93,6 +97,7 @@ interface PaperPatientWorkspaceProps {
     occurredAt?: string;
     interpretation?: string;
   }) => Promise<void>;
+  onSaveAIToNote?: (summaryText: string) => Promise<void>;
 }
 
 function getInitials(name: string): string {
@@ -142,6 +147,7 @@ export function PaperPatientWorkspace({
   onAddAllergy,
   onUpdateAllergy,
   onAddGeneticFinding,
+  onSaveAIToNote,
 }: PaperPatientWorkspaceProps) {
   // Navigation tabs state: 8 canonical tabs per docs/PACK.md §2.1 & §6.3
   const [activeTab, setActiveTab] = useState<
@@ -165,6 +171,9 @@ export function PaperPatientWorkspace({
   const [isVitalsOpen, setIsVitalsOpen] = useState(false);
   const [isRecordsOpen, setIsRecordsOpen] = useState(false);
   const [isLabsOpen, setIsLabsOpen] = useState(false);
+  const [isCommunicationOpen, setIsCommunicationOpen] = useState(false);
+  const [isFHIROpen, setIsFHIROpen] = useState(false);
+  const [isComplianceOpen, setIsComplianceOpen] = useState(false);
 
   // Derive latest clinical vitals dynamically from patient record
   const sortedVitals = [...vitals].sort(
@@ -370,6 +379,33 @@ export function PaperPatientWorkspace({
             <span className="text-xs font-medium text-[var(--color-ink-muted)] px-2.5 py-1 rounded-full bg-white/50">
               Workspace Mode: Clinical View
             </span>
+            <button
+              type="button"
+              onClick={() => setIsCommunicationOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
+              data-testid="message-patient-button"
+            >
+              <MessageSquare className="w-3.5 h-3.5 stroke-[2.2] text-[var(--color-ink)]" />
+              <span>Message Patient</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsFHIROpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
+              data-testid="fhir-interop-btn"
+            >
+              <FileCode className="w-3.5 h-3.5 stroke-[2.2] text-[var(--color-ink)]" />
+              <span>FHIR R4</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsComplianceOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
+              data-testid="compliance-modal-btn"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 stroke-[2.2] text-emerald-700" />
+              <span>Compliance</span>
+            </button>
             <button
               type="button"
               onClick={onAddEntry}
@@ -776,6 +812,7 @@ export function PaperPatientWorkspace({
             <VisitsTabView
               patientId={patient.id}
               patientName={patient.name}
+              patient={patient}
               visits={visits}
               vitals={vitals}
               onShowOnTimeline={() => {
@@ -834,6 +871,20 @@ export function PaperPatientWorkspace({
               onShowOnTimeline={() => {
                 setActiveTab('Overview');
               }}
+            />
+          </div>
+        ) : activeTab === 'AI Analysis' ? (
+          <div className="pt-2">
+            <AIAnalyticsTabView
+              patient={patient}
+              medications={medications}
+              labs={labs}
+              visits={visits}
+              careEvents={careEvents}
+              onShowOnTimeline={() => {
+                setActiveTab('Overview');
+              }}
+              onSaveToNote={onSaveAIToNote}
             />
           </div>
         ) : (
@@ -1456,6 +1507,27 @@ export function PaperPatientWorkspace({
           </div>
         </div>
       </OverlaySheet>
+
+      {/* Phase L3: In-App & External Communication Drawer */}
+      <CommunicationModal
+        isOpen={isCommunicationOpen}
+        onClose={() => setIsCommunicationOpen(false)}
+        patient={patient}
+      />
+
+      {/* Phase L7: HL7 FHIR R4 Interoperability Modal */}
+      <FHIRInteroperabilityModal
+        isOpen={isFHIROpen}
+        onClose={() => setIsFHIROpen(false)}
+        patient={patient}
+      />
+
+      {/* Phase L8: Security, Egypt PDPL Law 151/2020 Compliance Center Modal */}
+      <ComplianceCenterModal
+        isOpen={isComplianceOpen}
+        onClose={() => setIsComplianceOpen(false)}
+        patient={patient}
+      />
     </div>
   );
 }

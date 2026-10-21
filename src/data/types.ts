@@ -228,3 +228,27 @@ export interface GeneticFinding {
   createdBy: string;
   createdAt?: string;
 }
+
+export type MessageChannel = 'in_app' | 'whatsapp' | 'telegram';
+export type MessageRole = 'doctor' | 'patient' | 'system';
+export type MessageDeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface ChatMessage {
+  id: string;
+  orgId: string;
+  patientId: string;
+  senderRole: MessageRole;
+  senderName: string;
+  channel: MessageChannel;
+  content: string;
+  sentAt: string;
+  status: MessageDeliveryStatus;
+  metadata?: {
+    externalId?: string;
+    recipientPhone?: string;
+    telegramChatId?: string;
+    templateName?: string;
+    consentObtained?: boolean;
+  };
+}
+

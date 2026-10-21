@@ -328,6 +328,29 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
     }
   };
 
+  const handleSaveAIToNote = async (summaryText: string) => {
+    const todayFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const latestVisit = visits[0];
+    if (latestVisit) {
+      const updatedNotes = latestVisit.notes
+        ? `${latestVisit.notes}\n\n[AI Clinical Summary - Verified by Clinician on ${todayFormatted}]:\n${summaryText}`
+        : `[AI Clinical Summary - Verified by Clinician on ${todayFormatted}]:\n${summaryText}`;
+      await handleUpdateVisitNotes(latestVisit.id, { notes: updatedNotes });
+    } else {
+      await createCareEventAction({
+        patientId,
+        kind: 'visit',
+        label: 'Clinical Progress Note (AI Assisted)',
+        summary: summaryText,
+        occurredAt: todayFormatted,
+        source: 'doctor',
+        createdBy: 'Dr. Tarek',
+      });
+      await loadData();
+    }
+  };
+
+
   if (isLoading) {
     return <PatientWorkspaceSkeleton />;
   }
@@ -398,6 +421,7 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
         onAddAllergy={handleAddAllergy}
         onUpdateAllergy={handleUpdateAllergy}
         onAddGeneticFinding={handleAddGeneticFinding}
+        onSaveAIToNote={handleSaveAIToNote}
         onUploadStudy={async (newStudy) => {
           const res = await createImagingStudyAction({
             patientId,

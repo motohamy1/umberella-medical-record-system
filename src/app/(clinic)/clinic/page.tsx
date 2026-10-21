@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/state/EmptyState';
 import { LoadingSkeleton } from '@/components/state/LoadingSkeleton';
 import { PatientFolderCard } from '@/components/cards/PatientFolderCard';
 import { AddPatientSheet } from '@/components/forms/AddPatientSheet';
+import { SyncStatusBadge } from '@/components/sync/SyncStatusBadge';
 import { getDictionary, type Locale } from '@/i18n';
 import {
   Bell,
@@ -196,6 +197,9 @@ export default function ClinicHomePage() {
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>{dict.common.addPatient}</span>
               </button>
+
+              {/* Offline & Cloud Sync Center Badge (§572) */}
+              <SyncStatusBadge />
 
               {/* Notifications CircleButton with unread dot indicator */}
               <div className="relative">

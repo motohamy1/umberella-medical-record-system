@@ -38,8 +38,13 @@ import {
   recordPatientObservation,
   recordPatientMedicationTaken,
   getPatientHomeData,
+  confirmAndPrescribeOCRItem,
+  getPatientMessages,
+  sendChatMessage,
+  dispatchExternalNotification,
   type PatientObservationInput,
 } from './repository';
+import { processPrescriptionOCR, type PrescriptionScanResult, type ExtractedPrescriptionItem } from './ocrService';
 import { generateSignedMediaUrl } from '@/lib/signedAccess';
 import { readStore, writeStore } from './db';
 import { CreatePatientSchema } from './schemas';
@@ -61,7 +66,23 @@ import type {
   VisitStatus,
   ImagingStudy,
   GeneticFinding,
+  ChatMessage,
+  MessageChannel,
+  MessageRole,
 } from './types';
+import {
+  checkProductionComplianceGate,
+  getPatientConsents,
+  recordPatientConsent,
+  getAuditLogs,
+  verifyAuditTrailIntegrity,
+  generateDataSubjectAccessReport,
+  type ConsentPurpose,
+  type PatientConsentRecord,
+  type AuditLogEntry,
+  type ComplianceGateStatus,
+  type DataSubjectAccessReport,
+} from '@/lib/compliance';
 
 export interface ActionState<T> {
   success: boolean;
@@ -749,6 +770,226 @@ export async function recordPatientMedicationTakenAction(input: {
     };
   }
 }
+
+export async function processPrescriptionOCRAction(params: {
+  patientId: string;
+  sampleId?: string;
+  consentObtained: boolean;
+}): Promise<ActionState<PrescriptionScanResult>> {
+  try {
+    const result = await processPrescriptionOCR(params);
+    return {
+      success: true,
+      data: result,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'OCR extraction failed';
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function confirmAndPrescribeOCRItemAction(params: {
+  patientId: string;
+  item: ExtractedPrescriptionItem;
+  doctorName?: string;
+}): Promise<ActionState<Medication>> {
+  try {
+    const med = await confirmAndPrescribeOCRItem(params);
+    return {
+      success: true,
+      data: med,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to confirm prescription';
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+/**
+ * ============================================================================
+ * PHASE L3: IN-APP & EXTERNAL COMMUNICATION SERVER ACTIONS (PACK.md §11)
+ * ============================================================================
+ */
+export async function fetchPatientMessagesAction(patientId: string): Promise<ChatMessage[]> {
+  try {
+    return await getPatientMessages(patientId);
+  } catch (err) {
+    console.error('Failed to fetch patient messages:', err);
+    return [];
+  }
+}
+
+export async function sendChatMessageAction(input: {
+  patientId: string;
+  senderRole: MessageRole;
+  senderName: string;
+  channel: MessageChannel;
+  content: string;
+  metadata?: ChatMessage['metadata'];
+}): Promise<ActionState<ChatMessage>> {
+  try {
+    const msg = await sendChatMessage(input);
+    return {
+      success: true,
+      data: msg,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to send chat message';
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function dispatchExternalNotificationAction(input: {
+  patientId: string;
+  channel: 'whatsapp' | 'telegram';
+  templateName?: string;
+  templateParams?: Record<string, string>;
+  customContent?: string;
+  recipientPhone?: string;
+  telegramChatId?: string;
+  consentObtained: boolean;
+  senderName?: string;
+}): Promise<ActionState<ChatMessage>> {
+  try {
+    const result = await dispatchExternalNotification(input);
+    return {
+      success: true,
+      data: result.message,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to dispatch external notification';
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+/**
+ * ============================================================================
+ * PHASE L7: HL7 FHIR R4 SERVER ACTIONS (PACK.md §11)
+ * ============================================================================
+ */
+import {
+  exportPatientToFHIRBundle,
+  importPatientFromFHIRBundle,
+  type FHIRBundle,
+} from '@/lib/fhir';
+
+export async function exportPatientFHIRBundleAction(patientId: string): Promise<ActionState<FHIRBundle>> {
+  try {
+    const bundle = await exportPatientToFHIRBundle(patientId);
+    return {
+      success: true,
+      data: bundle,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to export FHIR bundle';
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function importPatientFHIRBundleAction(bundleJson: string): Promise<ActionState<{
+  patientId: string;
+  patientName: string;
+  importedCounts: Record<string, number>;
+}>> {
+  try {
+    const parsed = JSON.parse(bundleJson) as FHIRBundle;
+    const result = await importPatientFromFHIRBundle(parsed);
+    return {
+      success: true,
+      data: {
+        patientId: result.patient.id,
+        patientName: result.patient.name,
+        importedCounts: result.importedCounts,
+      },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to import FHIR bundle';
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+/* ========================================================================= */
+/* Phase L8: Security, Egypt PDPL Law 151/2020 Compliance Hardening Actions   */
+/* ========================================================================= */
+
+export async function checkComplianceGateAction(): Promise<ActionState<ComplianceGateStatus>> {
+  try {
+    const status = checkProductionComplianceGate();
+    return { success: true, data: status };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Compliance gate check failed' };
+  }
+}
+
+export async function getPatientConsentsAction(patientId: string): Promise<ActionState<PatientConsentRecord[]>> {
+  try {
+    const consents = getPatientConsents(patientId);
+    return { success: true, data: consents };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to retrieve consents' };
+  }
+}
+
+export async function updatePatientConsentAction(
+  patientId: string,
+  purpose: ConsentPurpose,
+  granted: boolean
+): Promise<ActionState<PatientConsentRecord>> {
+  try {
+    const updated = recordPatientConsent(patientId, purpose, granted, 'Clinician');
+    return { success: true, data: updated };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update consent' };
+  }
+}
+
+export async function getAuditLogsAction(patientId?: string): Promise<ActionState<AuditLogEntry[]>> {
+  try {
+    const logs = getAuditLogs(patientId);
+    return { success: true, data: logs };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to retrieve audit trail' };
+  }
+}
+
+export async function verifyAuditTrailIntegrityAction(): Promise<ActionState<{ isValid: boolean; checkedCount: number; error?: string }>> {
+  try {
+    const res = verifyAuditTrailIntegrity();
+    return { success: true, data: res };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Audit integrity check failed' };
+  }
+}
+
+export async function generateDSARAction(patientId: string): Promise<ActionState<DataSubjectAccessReport>> {
+  try {
+    const report = generateDataSubjectAccessReport(patientId);
+    return { success: true, data: report };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to generate DSAR report' };
+  }
+}
+
+
+
 
 
 

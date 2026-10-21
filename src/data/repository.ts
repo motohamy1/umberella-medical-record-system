@@ -22,6 +22,10 @@ import type {
   VisitStatus,
   ImagingStudy,
   GeneticFinding,
+  ChatMessage,
+  MessageChannel,
+  MessageRole,
+  MessageDeliveryStatus,
 } from './types';
 import type { CreatePatientInput } from './schemas';
 
@@ -347,6 +351,35 @@ export async function createPatient(input: CreatePatientInput): Promise<Patient>
     updatedAt: nowIso,
   };
 
+  const sql = getDb();
+  if (sql) {
+    try {
+      await (sql as any).query(
+        `INSERT INTO patients (id, org_id, mrn, name, sex, age, date_of_birth, phone, status, primary_concern, social_history, care_plan, last_visit_date, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+        [
+          newPatient.id,
+          newPatient.orgId,
+          newPatient.mrn,
+          newPatient.name,
+          newPatient.sex,
+          newPatient.age,
+          newPatient.dateOfBirth,
+          newPatient.phone,
+          newPatient.status,
+          newPatient.primaryConcern,
+          newPatient.socialHistory,
+          newPatient.carePlan,
+          newPatient.lastVisitDate,
+          newPatient.createdAt,
+          newPatient.updatedAt,
+        ]
+      );
+    } catch (err) {
+      console.warn('Neon insert patient failed, fallback to store:', err);
+    }
+  }
+
   store.patients = [newPatient, ...(store.patients || [])];
 
   // Intake care event
@@ -376,6 +409,78 @@ export async function getPatientCareEvents(patientId: string): Promise<CareEvent
 export async function getPatientVitals(patientId: string): Promise<VitalObservation[]> {
   const store = readStore();
   return (store.vitals || []).filter((v: VitalObservation) => v.patientId === patientId);
+}
+
+export async function createVital(input: {
+  patientId: string;
+  visitId?: string | null;
+  metric: 'pulse' | 'pressure' | 'oxygen' | 'temp' | 'glucose' | 'weight' | 'mood' | string;
+  value: string;
+  unit: string;
+  measuredAt?: string;
+  source?: ProvenanceSource;
+  createdBy?: string;
+}): Promise<VitalObservation> {
+  const store = readStore();
+  const patient = (store.patients || []).find((p: Patient) => p.id === input.patientId);
+  const orgId = patient?.orgId || 'org-nile';
+  const now = input.measuredAt || new Date().toISOString();
+  const vitalId = `vit-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+  const allowedMetrics: Array<'pulse' | 'pressure' | 'oxygen' | 'temp' | 'glucose' | 'weight' | 'mood'> = [
+    'pulse', 'pressure', 'oxygen', 'temp', 'glucose', 'weight', 'mood'
+  ];
+  const metric = allowedMetrics.includes(input.metric as any)
+    ? (input.metric as 'pulse' | 'pressure' | 'oxygen' | 'temp' | 'glucose' | 'weight' | 'mood')
+    : 'pulse';
+
+  const newVital: VitalObservation = {
+    id: vitalId,
+    orgId,
+    patientId: input.patientId,
+    visitId: input.visitId || null,
+    metric,
+    value: input.value,
+    unit: input.unit || '',
+    measuredAt: now,
+    source: input.source || 'doctor',
+    createdBy: input.createdBy || 'Clinician',
+    verifiedBy: null,
+  };
+
+  const sql = getDb();
+  if (sql) {
+    try {
+      await (sql as any).query(
+        `INSERT INTO vital_observations (id, org_id, patient_id, visit_id, metric, value, unit, measured_at, source, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [newVital.id, newVital.orgId, newVital.patientId, newVital.visitId, newVital.metric, newVital.value, newVital.unit, newVital.measuredAt, newVital.source, newVital.createdBy]
+      );
+    } catch (err) {
+      console.warn('Neon insert vital failed, fallback to store:', err);
+    }
+  }
+
+  store.vitals = [newVital, ...(store.vitals || [])];
+
+  const careEvent: CareEvent = {
+    id: `ce-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    orgId,
+    patientId: input.patientId,
+    visitId: input.visitId || null,
+    kind: 'vitals',
+    label: `${metric.charAt(0).toUpperCase() + metric.slice(1)}: ${input.value} ${input.unit || ''}`.trim(),
+    summary: `${metric} observation: ${input.value} ${input.unit || ''}`.trim(),
+    occurredAt: now,
+    sourceTable: 'vital_observations',
+    sourceId: newVital.id,
+    source: input.source || 'doctor',
+    createdBy: input.createdBy || 'Clinician',
+  };
+  store.careEvents = [careEvent, ...(store.careEvents || [])];
+
+  writeStore(store);
+  return newVital;
 }
 
 export async function getClinicAppointments(): Promise<Appointment[]> {
@@ -673,6 +778,19 @@ export async function createMedication(input: {
     createdBy: input.createdBy || 'Dr. Tarek',
     createdAt: now,
   };
+
+  const sql = getDb();
+  if (sql) {
+    try {
+      await (sql as any).query(
+        `INSERT INTO medications (id, org_id, patient_id, name, strength, doses_per_day, route, instructions, status, start_date, source, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [newMed.id, newMed.orgId, newMed.patientId, newMed.name, newMed.strength, newMed.dosesPerDay, newMed.route, newMed.instructions, newMed.status, newMed.startDate, newMed.source, newMed.createdBy]
+      );
+    } catch (err) {
+      console.warn('Neon insert medication failed, fallback to store:', err);
+    }
+  }
 
   store.medications = [newMed, ...(store.medications || [])];
 
@@ -1620,7 +1738,7 @@ export async function createGeneticFinding(input: {
 
 export interface PatientObservationInput {
   patientId: string;
-  kind: 'vitals' | 'symptom';
+  kind: 'vitals' | 'symptom' | 'note';
   metric?: 'pulse' | 'pressure' | 'oxygen' | 'temp' | 'glucose' | 'weight' | 'mood';
   value?: string;
   unit?: string;
@@ -1862,5 +1980,202 @@ export async function getPatientHomeData(patientId: string) {
     carePlanGoal: patient?.carePlan ? `Goal: ${patient.carePlan}` : 'Goal: Maintain BP < 130/80 mmHg & regular physical activity',
   };
 }
+
+/**
+ * Confirm and prescribe an OCR-extracted prescription item (Phase L1).
+ * Writes to medications table with source: 'ocr', verified by clinician.
+ */
+export async function confirmAndPrescribeOCRItem(input: {
+  patientId: string;
+  item: {
+    medicationName: string;
+    strength: string;
+    route?: string;
+    dosesPerDay?: number;
+    instructions?: string;
+    catalogMatch?: string;
+  };
+  doctorName?: string;
+}): Promise<Medication> {
+  const doctorName = input.doctorName || 'Dr. Tarek';
+  return createMedication({
+    patientId: input.patientId,
+    name: input.item.medicationName,
+    strength: input.item.strength,
+    route: input.item.route || 'Oral',
+    dosesPerDay: input.item.dosesPerDay || 1,
+    instructions: input.item.instructions || `${input.item.medicationName} ${input.item.strength}`,
+    source: 'ocr',
+    createdBy: doctorName,
+  });
+}
+
+import {
+  sendWhatsAppMessage,
+  sendTelegramMessage,
+  renderTemplate,
+} from './messagingAdapters';
+
+const DEFAULT_SEED_MESSAGES: ChatMessage[] = [
+  {
+    id: 'msg-seed-1',
+    orgId: 'org-nile',
+    patientId: 'p-tiffany',
+    senderRole: 'doctor',
+    senderName: 'Dr. Tarek',
+    channel: 'in_app',
+    content: 'Hello Tiffany, I reviewed your follow-up notes. How are your symptoms progressing?',
+    sentAt: '2026-10-18T10:15:00Z',
+    status: 'read',
+  },
+  {
+    id: 'msg-seed-2',
+    orgId: 'org-nile',
+    patientId: 'p-tiffany',
+    senderRole: 'patient',
+    senderName: 'Tiffany Woodward',
+    channel: 'in_app',
+    content: 'Good morning Dr. Tarek! The headaches have significantly decreased since starting the new medication.',
+    sentAt: '2026-10-18T10:22:00Z',
+    status: 'read',
+  },
+  {
+    id: 'msg-seed-3',
+    orgId: 'org-nile',
+    patientId: 'p-tiffany',
+    senderRole: 'doctor',
+    senderName: 'Dr. Tarek',
+    channel: 'whatsapp',
+    content: 'Excellent news. Please continue the regimen and record your blood pressure twice weekly in the app.',
+    sentAt: '2026-10-18T10:30:00Z',
+    status: 'delivered',
+    metadata: {
+      recipientPhone: '+1 (555) 382-9012',
+      consentObtained: true,
+    },
+  },
+];
+
+export async function getPatientMessages(patientId: string): Promise<ChatMessage[]> {
+  const store = readStore();
+  if (!store.chat_messages) {
+    store.chat_messages = [...DEFAULT_SEED_MESSAGES];
+    writeStore(store);
+  }
+  return (store.chat_messages || []).filter((m: ChatMessage) => m.patientId === patientId);
+}
+
+export async function sendChatMessage(input: {
+  patientId: string;
+  senderRole: MessageRole;
+  senderName: string;
+  channel: MessageChannel;
+  content: string;
+  metadata?: ChatMessage['metadata'];
+}): Promise<ChatMessage> {
+  const store = readStore();
+  if (!store.chat_messages) {
+    store.chat_messages = [...DEFAULT_SEED_MESSAGES];
+  }
+
+  const patient = (store.patients || []).find((p: Patient) => p.id === input.patientId);
+  const newMsg: ChatMessage = {
+    id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    orgId: patient?.orgId || 'org-nile',
+    patientId: input.patientId,
+    senderRole: input.senderRole,
+    senderName: input.senderName,
+    channel: input.channel,
+    content: input.content,
+    sentAt: new Date().toISOString(),
+    status: input.channel === 'in_app' ? 'delivered' : 'sent',
+    metadata: input.metadata,
+  };
+
+  store.chat_messages.push(newMsg);
+  writeStore(store);
+  return newMsg;
+}
+
+export async function dispatchExternalNotification(input: {
+  patientId: string;
+  channel: 'whatsapp' | 'telegram';
+  templateName?: string;
+  templateParams?: Record<string, string>;
+  customContent?: string;
+  recipientPhone?: string;
+  telegramChatId?: string;
+  consentObtained: boolean;
+  senderName?: string;
+}): Promise<{ success: boolean; message: ChatMessage }> {
+  const store = readStore();
+  const patient = (store.patients || []).find((p: Patient) => p.id === input.patientId);
+  const senderName = input.senderName || 'Dr. Tarek';
+
+  let content = input.customContent || '';
+  let externalId = '';
+
+  if (input.channel === 'whatsapp') {
+    const phone = input.recipientPhone || patient?.phone || '+20 100 000 0000';
+    const result = await sendWhatsAppMessage({
+      recipientPhone: phone,
+      content: input.customContent,
+      templateName: input.templateName,
+      templateParams: {
+        patientName: patient?.name || 'Patient',
+        clinicName: 'Nile Health Clinic',
+        ...input.templateParams,
+      },
+      consentObtained: input.consentObtained,
+    });
+    externalId = result.messageId;
+    if (input.templateName) {
+      content = renderTemplate(input.templateName, 'en', {
+        patientName: patient?.name || 'Patient',
+        clinicName: 'Nile Health Clinic',
+        ...input.templateParams,
+      });
+    }
+  } else {
+    const chatId = input.telegramChatId || patient?.name?.toLowerCase().replace(/\s+/g, '_') || 'patient_tg';
+    const result = await sendTelegramMessage({
+      chatId,
+      content: input.customContent,
+      templateName: input.templateName,
+      templateParams: {
+        patientName: patient?.name || 'Patient',
+        clinicName: 'Nile Health Clinic',
+        ...input.templateParams,
+      },
+      consentObtained: input.consentObtained,
+    });
+    externalId = result.messageId;
+    if (input.templateName) {
+      content = renderTemplate(input.templateName, 'en', {
+        patientName: patient?.name || 'Patient',
+        clinicName: 'Nile Health Clinic',
+        ...input.templateParams,
+      });
+    }
+  }
+
+  const savedMessage = await sendChatMessage({
+    patientId: input.patientId,
+    senderRole: 'doctor',
+    senderName,
+    channel: input.channel,
+    content,
+    metadata: {
+      externalId,
+      recipientPhone: input.recipientPhone || patient?.phone,
+      telegramChatId: input.telegramChatId,
+      templateName: input.templateName,
+      consentObtained: input.consentObtained,
+    },
+  });
+
+  return { success: true, message: savedMessage };
+}
+
 
 

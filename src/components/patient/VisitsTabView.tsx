@@ -31,15 +31,18 @@ import {
   Sparkles,
   ChevronRight,
   ShieldCheck,
+  Video,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Visit, VitalObservation, VisitStage, VisitStatus } from '@/data/types';
+import type { Patient, Visit, VitalObservation, VisitStage, VisitStatus } from '@/data/types';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
+import { TelehealthRoomModal } from '@/components/telehealth/TelehealthRoomModal';
 import { en } from '@/i18n/en';
 
 interface VisitsTabViewProps {
   patientId: string;
   patientName: string;
+  patient?: Patient;
   visits: Visit[];
   vitals?: VitalObservation[];
   onShowOnTimeline?: (dateStr: string) => void;
@@ -59,6 +62,7 @@ interface VisitsTabViewProps {
 export function VisitsTabView({
   patientId,
   patientName,
+  patient,
   visits = [],
   vitals = [],
   onShowOnTimeline,
@@ -72,6 +76,7 @@ export function VisitsTabView({
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [encounterStage, setEncounterStage] = useState<VisitStage>('after');
   const [isNewVisitOpen, setIsNewVisitOpen] = useState(false);
+  const [isTelehealthOpen, setIsTelehealthOpen] = useState(false);
 
   // New Visit form state
   const [newTitle, setNewTitle] = useState('');
@@ -240,14 +245,25 @@ export function VisitsTabView({
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsNewVisitOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--color-accent-neon)] hover:brightness-105 active:scale-98 text-xs font-bold text-[var(--color-ink)] shadow-xs transition-all cursor-pointer select-none"
-        >
-          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-          <span>{dict.scheduleVisit}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsTelehealthOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-stone-900 hover:bg-black active:scale-98 text-xs font-bold text-white shadow-xs transition-all cursor-pointer select-none"
+            data-testid="start-telehealth-btn"
+          >
+            <Video className="w-3.5 h-3.5 text-emerald-400 stroke-[2.2]" />
+            <span>Start Telehealth Consult</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsNewVisitOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--color-accent-neon)] hover:brightness-105 active:scale-98 text-xs font-bold text-[var(--color-ink)] shadow-xs transition-all cursor-pointer select-none"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>{dict.scheduleVisit}</span>
+          </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -772,6 +788,32 @@ export function VisitsTabView({
           </div>
         </form>
       </OverlaySheet>
+
+      {/* Phase L4: Telehealth Video Consultation Room */}
+      <TelehealthRoomModal
+        isOpen={isTelehealthOpen}
+        onClose={() => setIsTelehealthOpen(false)}
+        patient={
+          patient || {
+            id: patientId,
+            name: patientName,
+            orgId: 'org-nile',
+            mrn: `MRN-${patientId}`,
+            sex: 'Other',
+            age: 40,
+            dateOfBirth: '1984-01-01',
+            status: 'Needs review',
+            phone: '+20 100 000 0000',
+            primaryConcern: 'Clinical consultation',
+            lastVisitDate: '2026-10-14',
+            createdAt: '',
+            updatedAt: '',
+          }
+        }
+        visit={selectedVisit || visits[0]}
+        onUpdateVisitStage={onUpdateVisitStage}
+        onUpdateVisitNotes={onUpdateVisitNotes}
+      />
     </div>
   );
 }

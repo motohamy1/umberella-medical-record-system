@@ -30,11 +30,13 @@ import {
   CheckCircle2,
   FileText,
   Sliders,
+  Scan,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Medication, Allergy, MedicationStatus } from '@/data/types';
 import { MedicationChip } from '@/components/cards/MedicationChip';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
+import { PrescriptionOCRModal } from './PrescriptionOCRModal';
 import { en } from '@/i18n/en';
 
 interface MedicationsTabViewProps {
@@ -69,6 +71,7 @@ export function MedicationsTabView({
 
   // Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isOcrOpen, setIsOcrOpen] = useState(false);
   const [selectedMedForDose, setSelectedMedForDose] = useState<Medication | null>(null);
   const [selectedMedForStop, setSelectedMedForStop] = useState<Medication | null>(null);
 
@@ -262,14 +265,26 @@ export function MedicationsTabView({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--color-accent-neon)] hover:brightness-105 active:scale-98 text-xs font-bold text-[var(--color-ink)] shadow-xs transition-all cursor-pointer select-none"
-        >
-          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-          <span>{dict.startMedication}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsOcrOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--color-surface)] hover:bg-white border border-black/10 text-xs font-semibold text-[var(--color-ink)] shadow-2xs hover:shadow-xs transition-all cursor-pointer select-none"
+            data-testid="scan-prescription-ocr-button"
+          >
+            <Scan className="w-3.5 h-3.5" />
+            <span>{en.ocr.scanPrescription}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAddOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--color-accent-neon)] hover:brightness-105 active:scale-98 text-xs font-bold text-[var(--color-ink)] shadow-xs transition-all cursor-pointer select-none"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>{dict.startMedication}</span>
+          </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -746,6 +761,16 @@ export function MedicationsTabView({
           </div>
         </form>
       </OverlaySheet>
+
+      {/* Prescription OCR & Verification Modal (Phase L1) */}
+      <PrescriptionOCRModal
+        isOpen={isOcrOpen}
+        onClose={() => setIsOcrOpen(false)}
+        patientId={patientId}
+        onMedicationAdded={() => {
+          if (onShowOnTimeline) onShowOnTimeline(new Date().toISOString());
+        }}
+      />
     </div>
   );
 }
