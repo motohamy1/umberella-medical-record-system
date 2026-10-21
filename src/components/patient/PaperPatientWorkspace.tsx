@@ -289,58 +289,58 @@ export function PaperPatientWorkspace({
     {
       id: 'Overview',
       label: 'Overview',
-      stepClass: 'w-[118px] sm:w-[136px] h-[68px] sm:h-[76px] mt-0 rounded-[20px] font-bold text-sm sm:text-base',
-      bgClass: 'bg-[var(--color-accent-neon)] text-[var(--color-ink)] shadow-md',
-      activeRing: 'ring-2 ring-black/20',
+      stepClass: 'w-[118px] sm:w-[136px] h-[68px] sm:h-[76px] mt-0 rounded-[20px] text-sm sm:text-base',
+      fontClass: 'font-semibold',
+      inactiveBgClass: 'bg-[var(--color-tab-slate1)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'AI Analysis',
       label: 'AI Analysis',
-      stepClass: 'w-[106px] sm:w-[122px] h-[60px] sm:h-[68px] mt-1.5 sm:mt-2 rounded-[18px] font-semibold text-xs sm:text-sm',
-      bgClass: 'bg-[var(--color-tab-slate1)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      stepClass: 'w-[106px] sm:w-[122px] h-[60px] sm:h-[68px] mt-1.5 sm:mt-2 rounded-[18px] text-xs sm:text-sm',
+      fontClass: 'font-semibold',
+      inactiveBgClass: 'bg-[var(--color-tab-slate1)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'Visits',
       label: 'Visits',
-      stepClass: 'w-[88px] sm:w-[102px] h-[56px] sm:h-[64px] mt-3 sm:mt-3.5 rounded-[18px] font-medium text-xs',
-      bgClass: 'bg-[var(--color-tab-slate2)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      stepClass: 'w-[88px] sm:w-[102px] h-[56px] sm:h-[64px] mt-3 sm:mt-3.5 rounded-[18px] text-xs',
+      fontClass: 'font-medium',
+      inactiveBgClass: 'bg-[var(--color-tab-slate2)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'Medications',
       label: 'Medications',
-      stepClass: 'w-[84px] sm:w-[98px] h-[52px] sm:h-[60px] mt-4 sm:mt-4.5 rounded-[16px] font-medium text-xs',
-      bgClass: 'bg-[var(--color-tab-slate1)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      stepClass: 'w-[84px] sm:w-[98px] h-[52px] sm:h-[60px] mt-4 sm:mt-4.5 rounded-[16px] text-xs',
+      fontClass: 'font-medium',
+      inactiveBgClass: 'bg-[var(--color-tab-slate1)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'Labs',
       label: 'Labs',
-      stepClass: 'w-[80px] sm:w-[94px] h-[48px] sm:h-[56px] mt-5 sm:mt-5.5 rounded-[16px] font-medium text-xs',
-      bgClass: 'bg-[var(--color-tab-slate2)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      stepClass: 'w-[80px] sm:w-[94px] h-[48px] sm:h-[56px] mt-5 sm:mt-5.5 rounded-[16px] text-xs',
+      fontClass: 'font-medium',
+      inactiveBgClass: 'bg-[var(--color-tab-slate2)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'Imaging',
       label: 'Imaging',
       stepClass: 'w-[72px] sm:w-[84px] h-[44px] sm:h-[52px] mt-6.5 sm:mt-7 rounded-[16px] font-medium text-[11px] sm:text-xs',
-      bgClass: 'bg-[var(--color-tab-slate3)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      fontClass: 'font-medium',
+      inactiveBgClass: 'bg-[var(--color-tab-slate3)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'Allergies',
       label: 'Allergies',
       stepClass: 'w-[64px] sm:w-[74px] h-[40px] sm:h-[46px] mt-7.5 sm:mt-8 rounded-[16px] font-medium text-[11px] sm:text-xs',
-      bgClass: 'bg-[var(--color-tab-slate3)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      fontClass: 'font-medium',
+      inactiveBgClass: 'bg-[var(--color-tab-slate3)] text-[var(--color-white)] shadow-xs',
     },
     {
       id: 'Genetics',
       label: 'Genetics',
       stepClass: 'w-[62px] sm:w-[72px] h-[36px] sm:h-[42px] mt-8.5 sm:mt-9 rounded-[14px] font-medium text-[10px] sm:text-[11px]',
-      bgClass: 'bg-[var(--color-tab-slate4)] text-[var(--color-white)] shadow-xs',
-      activeRing: 'ring-2 ring-[var(--color-accent-neon)]',
+      fontClass: 'font-medium',
+      inactiveBgClass: 'bg-[var(--color-tab-slate4)] text-[var(--color-white)] shadow-xs',
     },
   ] as const;
 
@@ -545,8 +545,10 @@ export function PaperPatientWorkspace({
                     whileTap={{ scale: 0.98 }}
                     transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                     onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className={`relative flex flex-col justify-between p-3 select-none cursor-pointer shrink-0 transition-shadow ${tab.stepClass} ${tab.bgClass} ${
-                      isActive ? `${tab.activeRing} scale-[1.03] shadow-md z-10` : 'hover:opacity-90 opacity-90'
+                    className={`relative flex flex-col justify-between p-3 select-none cursor-pointer shrink-0 transition-all border-0 outline-none ${tab.stepClass} ${
+                      isActive
+                        ? 'bg-[var(--color-accent-neon)] text-[var(--color-ink)] font-bold scale-[1.03] shadow-md z-10'
+                        : `${tab.inactiveBgClass} ${tab.fontClass} hover:opacity-90 opacity-90`
                     }`}
                   >
                     <span className="leading-tight">{tab.label}</span>
