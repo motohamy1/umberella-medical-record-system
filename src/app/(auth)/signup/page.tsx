@@ -42,7 +42,7 @@ export default function SignupPage() {
     try {
       const { error } = await authClient.signIn.social({
         provider: 'google',
-        callbackURL: window.location.origin,
+        callbackURL: `${window.location.origin}/auth/callback`,
         errorCallbackURL: `${window.location.origin}/signup`,
       });
       if (error) {
