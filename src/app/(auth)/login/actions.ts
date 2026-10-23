@@ -1,6 +1,7 @@
 'use server';
 
 import { auth } from '@/lib/auth/server';
+import { homePathForEmail } from '@/lib/auth/role';
 import { redirect } from 'next/navigation';
 
 export async function signInAction(formData: FormData) {
@@ -13,12 +14,7 @@ export async function signInAction(formData: FormData) {
     return { error: error.message || 'Failed to sign in. Try again.' };
   }
 
-  // Role routing: patients -> /patient, staff -> /clinic (heuristic; replace with DB role lookup later)
-  if (email.toLowerCase().includes('patient')) {
-    redirect('/patient');
-  } else {
-    redirect('/clinic');
-  }
+  redirect(homePathForEmail(email));
 }
 
 export async function signUpAction(formData: FormData) {
@@ -32,9 +28,5 @@ export async function signUpAction(formData: FormData) {
     return { error: error.message || 'Failed to create account.' };
   }
 
-  if (email.toLowerCase().includes('patient')) {
-    redirect('/patient');
-  } else {
-    redirect('/clinic');
-  }
+  redirect(homePathForEmail(email));
 }

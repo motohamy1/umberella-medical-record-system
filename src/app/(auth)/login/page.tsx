@@ -24,7 +24,19 @@ export default function LoginPage() {
   const dict = getDictionary(locale);
 
   const handleGoogle = async () => {
-    await authClient.signIn.social({ provider: 'google', callbackURL: window.location.origin });
+    setError('');
+    try {
+      const { error } = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: window.location.origin,
+        errorCallbackURL: `${window.location.origin}/login`,
+      });
+      if (error) {
+        setError(error.message || 'Google sign-in is not available right now.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

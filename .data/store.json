@@ -147,6 +147,133 @@
   ],
   "careEvents": [
     {
+      "id": "ce-1792786094147",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "lab",
+      "label": "Genetics: SLCO1B1 *5 Reduced Transporter Function",
+      "summary": "Statin Induced Myopathy Panel",
+      "occurredAt": "2026-03-10T12:00:00Z",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "ce-1792786093741",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "symptom",
+      "label": "Allergy: Codeine",
+      "summary": "SEVERE sensitivity — Reaction: Severe nausea & respiratory depression",
+      "occurredAt": "2026-10-23T20:08:13.543Z",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "ce-1792786089523",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "medication",
+      "label": "Start: Alkapress 10 mg",
+      "summary": "Alkapress 10 mg (1x daily, Oral)",
+      "occurredAt": "2026-10-23T20:08:09.330Z",
+      "sourceTable": "medication_events",
+      "sourceId": "me-1792786089523",
+      "source": "ocr",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "ce-1792786088179",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "medication",
+      "label": "Start: Concor 5 mg",
+      "summary": "Concor 5 mg (1x daily, Oral)",
+      "occurredAt": "2026-10-23T20:08:07.986Z",
+      "sourceTable": "medication_events",
+      "sourceId": "me-1792786088179",
+      "source": "ocr",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "ce-1792786086970",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "kind": "symptom",
+      "label": "Allergy: Sulfa Drugs",
+      "summary": "SEVERE sensitivity — Reaction: Skin Rash",
+      "occurredAt": "2026-10-23T20:08:06.772Z",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "ce-1792786086755",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "kind": "medication",
+      "label": "Start: Metformin 500mg Standard Dose",
+      "summary": "Metformin 500mg Standard Dose (1x daily, Oral)",
+      "occurredAt": "2026-10-23T20:08:06.570Z",
+      "sourceTable": "medication_events",
+      "sourceId": "me-1792786086755",
+      "source": "doctor",
+      "createdBy": "FHIR Import"
+    },
+    {
+      "id": "ce-1792786086555-893",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "visitId": null,
+      "kind": "vitals",
+      "label": "Pulse: 78 bpm",
+      "summary": "pulse observation: 78 bpm",
+      "occurredAt": "2026-10-23T20:08:06.359Z",
+      "sourceTable": "vital_observations",
+      "sourceId": "vit-1792786086370-117",
+      "source": "doctor",
+      "createdBy": "Clinician"
+    },
+    {
+      "id": "ce-1792786086353",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "kind": "visit",
+      "label": "Initial Patient Intake",
+      "summary": "Imported via FHIR R4 Interoperability Bundle. Status: New.",
+      "occurredAt": "14 Oct 2026",
+      "source": "staff",
+      "createdBy": "Staff Receptionist"
+    },
+    {
+      "id": "ce-pt-med-1792786078832",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "medication",
+      "label": "Dose Taken: Amlodipine 10 mg",
+      "summary": "Patient confirmed dose taken at 11:07 PM",
+      "occurredAt": "2026-10-23T20:07:58.832Z",
+      "source": "patient",
+      "createdBy": "Mostafa Ibrahim",
+      "sourceTable": "medication_events",
+      "sourceId": "me-pt-1792786078832",
+      "verifiedBy": null,
+      "verifiedAt": null
+    },
+    {
+      "id": "ce-pt-1792786078627",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "symptom",
+      "label": "Patient Symptom: Headache",
+      "summary": "Reported severity: mild · Note: Mild tension headache in the afternoon",
+      "occurredAt": "2026-10-23T20:07:58.429Z",
+      "source": "patient",
+      "createdBy": "Mostafa Ibrahim",
+      "sourceTable": "symptoms",
+      "sourceId": "sym-pt-1792786078429",
+      "verifiedBy": null,
+      "verifiedAt": null
+    },
+    {
       "id": "ce-1792776446361",
       "orgId": "org-nile",
       "patientId": "p-001",
@@ -3315,6 +3442,51 @@
   ],
   "medications": [
     {
+      "id": "med-1792786089330",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "name": "Alkapress",
+      "strength": "10 mg",
+      "dosesPerDay": 1,
+      "route": "Oral",
+      "instructions": "Take 1 tablet daily in the morning with water",
+      "status": "active",
+      "startDate": "2026-10-23T20:08:09.330Z",
+      "source": "ocr",
+      "createdBy": "Dr. Tarek",
+      "createdAt": "2026-10-23T20:08:09.330Z"
+    },
+    {
+      "id": "med-1792786087986",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "name": "Concor",
+      "strength": "5 mg",
+      "dosesPerDay": 1,
+      "route": "Oral",
+      "instructions": "Take 1 tablet after breakfast",
+      "status": "active",
+      "startDate": "2026-10-23T20:08:07.986Z",
+      "source": "ocr",
+      "createdBy": "Dr. Tarek",
+      "createdAt": "2026-10-23T20:08:07.986Z"
+    },
+    {
+      "id": "med-1792786086570",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "name": "Metformin 500mg",
+      "strength": "Standard Dose",
+      "dosesPerDay": 1,
+      "route": "Oral",
+      "instructions": "1 tablet twice daily with meals",
+      "status": "active",
+      "startDate": "2026-10-23T20:08:06.570Z",
+      "source": "doctor",
+      "createdBy": "FHIR Import",
+      "createdAt": "2026-10-23T20:08:06.570Z"
+    },
+    {
       "id": "med-1792776445195",
       "orgId": "org-nile",
       "patientId": "p-001",
@@ -4118,6 +4290,50 @@
     }
   ],
   "medicationEvents": [
+    {
+      "id": "me-1792786089523",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "medicationId": "med-1792786089330",
+      "eventType": "start",
+      "detail": "Alkapress 10 mg initiated (1x daily)",
+      "occurredAt": "2026-10-23T20:08:09.330Z",
+      "source": "ocr",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "me-1792786088179",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "medicationId": "med-1792786087986",
+      "eventType": "start",
+      "detail": "Concor 5 mg initiated (1x daily)",
+      "occurredAt": "2026-10-23T20:08:07.986Z",
+      "source": "ocr",
+      "createdBy": "Dr. Tarek"
+    },
+    {
+      "id": "me-1792786086755",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "medicationId": "med-1792786086570",
+      "eventType": "start",
+      "detail": "Metformin 500mg Standard Dose initiated (1x daily)",
+      "occurredAt": "2026-10-23T20:08:06.570Z",
+      "source": "doctor",
+      "createdBy": "FHIR Import"
+    },
+    {
+      "id": "me-pt-1792786078832",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "medicationId": "med-001",
+      "eventType": "start",
+      "detail": "Dose taken by patient",
+      "occurredAt": "2026-10-23T20:07:58.832Z",
+      "source": "patient",
+      "createdBy": "Mostafa Ibrahim"
+    },
     {
       "id": "me-1792776445385",
       "orgId": "org-nile",
@@ -4945,6 +5161,19 @@
     }
   ],
   "vitals": [
+    {
+      "id": "vit-1792786086370-117",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "visitId": null,
+      "metric": "pulse",
+      "value": "78",
+      "unit": "bpm",
+      "measuredAt": "2026-10-23T20:08:06.359Z",
+      "source": "doctor",
+      "createdBy": "Clinician",
+      "verifiedBy": null
+    },
     {
       "id": "vit-1792776436721-587",
       "orgId": "org-nile",
@@ -20302,6 +20531,30 @@
   ],
   "allergies": [
     {
+      "id": "alg-1792786093543",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "substance": "Codeine",
+      "reaction": "Life-threatening bronchospasm",
+      "severity": "critical",
+      "status": "active",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek",
+      "createdAt": "2026-10-23T20:08:13.543Z"
+    },
+    {
+      "id": "alg-1792786086772",
+      "orgId": "org-nile",
+      "patientId": "p-1792786086167",
+      "substance": "Sulfa Drugs",
+      "reaction": "Skin Rash",
+      "severity": "severe",
+      "status": "active",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek",
+      "createdAt": "2026-10-23T20:08:06.772Z"
+    },
+    {
       "id": "alg-1792776445750",
       "orgId": "org-nile",
       "patientId": "p-001",
@@ -20651,6 +20904,18 @@
     }
   ],
   "geneticFindings": [
+    {
+      "id": "gen-1792786093948",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "finding": "SLCO1B1 *5 Reduced Transporter Function",
+      "sourceDocument": "Statin Induced Myopathy Panel",
+      "occurredAt": "2026-03-10T12:00:00Z",
+      "interpretation": null,
+      "source": "doctor",
+      "createdBy": "Dr. Tarek",
+      "createdAt": "2026-10-23T20:08:13.948Z"
+    },
     {
       "id": "gen-1792776446154",
       "orgId": "org-nile",
@@ -21094,8 +21359,8 @@
   "patientConsents": [],
   "auditLogs": [
     {
-      "id": "aud-1792776448472-524",
-      "timestamp": "2026-10-23T17:27:28.472Z",
+      "id": "aud-1792786095116-696",
+      "timestamp": "2026-10-23T20:08:15.116Z",
       "actorId": "doc-tarek",
       "actorRole": "doctor",
       "action": "READ",
@@ -21106,7 +21371,7 @@
       "details": "Viewed patient longitudinal timeline",
       "ipAddress": "127.0.0.1",
       "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
-      "hash": "a7862d582bc56a6cfa9269f963a13efe90da78991d674a265e8d3242b3674d54"
+      "hash": "40486aff10d70554ddf9da57f2021fe6be396814478aea0b8bd220428e433872"
     }
   ],
   "chat_messages": [
@@ -21652,6 +21917,45 @@
       "channel": "in_app",
       "content": "Please update your dosage schedule.",
       "sentAt": "2026-10-23T17:27:30.241Z",
+      "status": "delivered"
+    },
+    {
+      "id": "msg-1792786102200-183",
+      "orgId": "org-nile",
+      "patientId": "p-comm-test",
+      "senderRole": "doctor",
+      "senderName": "Dr. Tarek",
+      "channel": "in_app",
+      "content": "Clinical check-in: blood pressure status",
+      "sentAt": "2026-10-23T20:08:22.200Z",
+      "status": "delivered"
+    },
+    {
+      "id": "msg-1792786102223-619",
+      "orgId": "org-nile",
+      "patientId": "p-comm-test",
+      "senderRole": "doctor",
+      "senderName": "Dr. Tarek",
+      "channel": "whatsapp",
+      "content": "Hello Patient, your diagnostic results for Lipid Panel are now available. Dr. Tarek has reviewed them in your Umbrella health portal.",
+      "sentAt": "2026-10-23T20:08:22.223Z",
+      "status": "sent",
+      "metadata": {
+        "externalId": "wamid.HBg17927861022208412==",
+        "recipientPhone": "+20 102 345 6789",
+        "templateName": "lab_ready",
+        "consentObtained": true
+      }
+    },
+    {
+      "id": "msg-1792786102417-386",
+      "orgId": "org-nile",
+      "patientId": "p-comm-test",
+      "senderRole": "doctor",
+      "senderName": "Dr. Tarek",
+      "channel": "in_app",
+      "content": "Please update your dosage schedule.",
+      "sentAt": "2026-10-23T20:08:22.417Z",
       "status": "delivered"
     }
   ]

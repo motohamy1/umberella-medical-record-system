@@ -38,7 +38,19 @@ export default function SignupPage() {
   };
 
   const handleGoogle = async () => {
-    await authClient.signIn.social({ provider: 'google', callbackURL: window.location.origin });
+    setError('');
+    try {
+      const { error } = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: window.location.origin,
+        errorCallbackURL: `${window.location.origin}/signup`,
+      });
+      if (error) {
+        setError(error.message || 'Google sign-in is not available right now.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed.');
+    }
   };
 
   return (
