@@ -142,7 +142,7 @@ export function PatientFolderCard({
         aria-hidden="true"
       >
         <path
-          d="M 0 94 Q 0 100 6 100 L 94 100 Q 100 100 100 94 L 100 16 Q 100 12 94 12 L 54 12 C 47 12 43 0 37 0 L 6 0 Q 0 0 0 5 Z"
+          d="M 0 94 Q 0 100 6 100 L 94 100 Q 100 100 100 94 L 100 16 Q 100 12 94 12 L 56 12 C 49 12 45 0 39 0 L 6 0 Q 0 0 0 5 Z"
           fill="currentColor"
           stroke="var(--color-ink-soft)"
           strokeOpacity="0.4"
@@ -152,7 +152,7 @@ export function PatientFolderCard({
       </svg>
 
       {/* ── MRN Printed on Top-Left Back Tab (Mirrors in RTL) ── */}
-      <div className="absolute top-1 start-3 z-10 font-mono text-[10px] font-bold text-[var(--color-ink)] tracking-wider whitespace-nowrap">
+      <div className="absolute top-1 start-2.5 sm:start-3 z-10 font-mono text-[8px] sm:text-[8.5px] font-bold text-[var(--color-ink)] tracking-tight whitespace-nowrap">
         {patient.mrn}
       </div>
 

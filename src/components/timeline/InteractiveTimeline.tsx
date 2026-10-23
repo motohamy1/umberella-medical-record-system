@@ -1,26 +1,29 @@
 'use client';
 
 /**
- * Interactive care timeline (ref-2 "zoomed-out lens").
+ * Interactive care timeline (ref-2 "zoomed-out lens" + ref-1 "L3 deep dive").
  * - D3 owns the time scale; React renders everything (D3 never mutates React DOM).
- * - Milestones sit on the axis as neon document nodes; children hang below on curved
- *   connectors with kind icons and count badges; imaging renders as a photo card.
- * - Bottom scrubber: density dots with counts, month ticks + labels, dark window with
- *   rounded caps. Drag the window to pan, drag caps to resize the period, wheel to zoom.
+ * - Milestones sit on the axis as neon document nodes; children hang below on soft,
+ *   smooth, curvy wires with kind icons and count badges; imaging renders as a photo card.
+ * - Non-overlapping layout: lanes and overflow chips are collision-checked with strict bounds.
+ * - Interactive Pop-up card: clicking any icon/node opens an anchored floating clinical
+ *   detail card with kind-specific content, close button, outside-click dismissal, and tab navigation.
+ * - Bottom scrubber: density dots with counts, month ticks + labels, dark window with rounded caps.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as d3 from 'd3';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, ArrowRight, Layers } from 'lucide-react';
 import type { CareEvent } from '@/data/types';
 import { MetricCard } from '../cards/MetricCard';
 import { MedicationChip } from '../cards/MedicationChip';
 
-interface Props {
+export interface InteractiveTimelineProps {
   careEvents: CareEvent[];
   onAddEntry?: () => void;
   activeFilters?: string[];
+  onNavigateToTab?: (tab: string) => void;
 }
 
 const DAY = 86400000;
@@ -87,16 +90,34 @@ function FlaskGlyph({ className }: { className?: string }) {
 
 const AXIS_Y = 52;
 
-export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['Office Visits', 'Medications', 'Labs', 'Procedures', 'Hospitalizations', 'Imaging'] }: Props) {
+interface PopoverTarget {
+  id: string;
+  kind: CareEvent['kind'] | 'overflow' | 'milestone' | 'metric';
+  label: string;
+  summary?: string;
+  occurredAt?: string;
+  createdBy?: string;
+  source?: string;
+  count?: number;
+  events?: CareEvent[];
+  anchor: { x: number; y: number };
+}
+
+export function InteractiveTimeline({
+  careEvents,
+  onAddEntry,
+  activeFilters = ['Office Visits', 'Medications', 'Labs', 'Procedures', 'Hospitalizations', 'Imaging'],
+  onNavigateToTab,
+}: InteractiveTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activePopover, setActivePopover] = useState<PopoverTarget | null>(null);
   const [dragCap, setDragCap] = useState<'left' | 'right' | 'move' | null>(null);
   const [lensMode, setLensMode] = useState<'L2' | 'L3'>('L2');
 
   const allowedKinds = new Set(activeFilters.flatMap((f) => filterMap[f] || []));
-  // PACK §6: an empty selection means "all kinds", not "nothing".
   const isVisible = (k: CareEvent['kind']) => allowedKinds.size === 0 || allowedKinds.has(k);
   const source = careEvents.length ? careEvents : fallback;
   const events = source.filter((e) => isVisible(e.kind));
@@ -106,16 +127,11 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const fullMax = allDates.length ? new Date(Math.max(...allDates)) : new Date(Date.now() + DAY);
   fullMax.setDate(fullMax.getDate() + 21);
 
-  /* PACK §7.3: default view is the last ~5 months ending at the newest event,
-   * not the whole history (the scrubber + zoom reach the rest). */
   const DEFAULT_SPAN = 150 * DAY;
   const defaultStart = () => new Date(Math.max(fullMin.getTime(), fullMax.getTime() - DEFAULT_SPAN));
   const [viewStart, setViewStart] = useState<Date>(defaultStart);
   const [viewEnd, setViewEnd] = useState<Date>(fullMax);
 
-  /* Reset the visible window only when the data's real time bounds change.
-   * Keying on array identity would loop forever when the caller passes an
-   * inline/default array (new identity every render). */
   const boundsKey = allDates.length ? `${Math.min(...allDates)}|${Math.max(...allDates)}` : 'empty';
   useEffect(() => {
     setViewStart(defaultStart());
@@ -137,8 +153,6 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const xScale = d3.scaleTime().domain([viewStart, viewEnd]).range([36, Math.max(width - 70, 72)]);
   const tx = (d: Date) => xScale(d);
 
-  /* Keep the view over the data: never span more than the history + a 2-month
-   * margin, and never slide into months that hold no events. */
   const clampView = useCallback((s: number, e: number) => {
     const lo = fullMin.getTime() - 30 * DAY;
     const hi = fullMax.getTime() + 15 * DAY;
@@ -178,7 +192,11 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   /* drag to pan on canvas */
   const panFrom = useRef<{ x: number; s: number; e: number } | null>(null);
   const onCanvasPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button,a,[role="button"]')) return;
+    if ((e.target as HTMLElement).closest('button,a,[role="button"],[role="dialog"]')) return;
+    if (activePopover) {
+      setActivePopover(null);
+      setSelectedId(null);
+    }
     panFrom.current = { x: e.clientX, s: viewStart.getTime(), e: viewEnd.getTime() };
     const onMove = (ev2: PointerEvent) => {
       const p = panFrom.current;
@@ -196,27 +214,60 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     window.addEventListener('pointerup', onUp);
   };
 
-  /* keyboard */
+  /* keyboard dismissal */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === '+' || e.key === '=') zoomSimple(1.5);
       if (e.key === '-') zoomSimple(1 / 1.5);
-      if (e.key === 'Escape') setSelectedId(null);
+      if (e.key === 'Escape') {
+        setSelectedId(null);
+        setActivePopover(null);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewStart, viewEnd]);
 
-  /* ---- layout: milestones + assigned children (nearest previous milestone within 14d) ---- */
-  const milestones = events.filter((e) => e.kind === 'visit').sort((a, b) => +parseDate(a.occurredAt) - +parseDate(b.occurredAt));
+  /* Click-to-open popover handler */
+  const handleItemClick = (target: PopoverTarget) => {
+    if (activePopover?.id === target.id) {
+      setActivePopover(null);
+      setSelectedId(null);
+    } else {
+      setActivePopover(target);
+      setSelectedId(target.id);
+    }
+  };
 
-  /* PACK §7.3: node diameter follows px/day (40/34/28), and milestones closer
-   * than 1.2 diameters merge into one cluster node with a count badge. */
-  const pxPerDay = Math.max(width - 110, 120) / Math.max((viewEnd.getTime() - viewStart.getTime()) / DAY, 1);
-  const nodeD = pxPerDay < 1.5 ? 28 : pxPerDay < 6 ? 34 : 40;
+  /* Outside click listener to dismiss active popover */
+  useEffect(() => {
+    const handleDocumentClick = (e: PointerEvent) => {
+      if (!activePopover) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest('[role="dialog"]') ||
+        target.closest('[role="button"]') ||
+        target.closest('.cursor-pointer') ||
+        target.closest('button')
+      ) {
+        return;
+      }
+      setActivePopover(null);
+      setSelectedId(null);
+    };
+    document.addEventListener('pointerdown', handleDocumentClick);
+    return () => document.removeEventListener('pointerdown', handleDocumentClick);
+  }, [activePopover]);
+
+  const nodeD = lensMode === 'L3' ? 36 : 44;
+
+  /* milestones on axis */
+  const milestones = events.filter((e) => e.kind === 'visit');
   const milestoneClusters = (() => {
-    const out: { items: CareEvent[]; cx: number; t0: number; t1: number }[] = [];
+    interface Cluster { items: CareEvent[]; cx: number; t0: number; t1: number }
+    const out: Cluster[] = [];
     for (const m of milestones) {
       const x = tx(parseDate(m.occurredAt));
       const t = parseDate(m.occurredAt).getTime();
@@ -240,11 +291,9 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     .forEach((e) => {
       const t = parseDate(e.occurredAt).getTime();
       let parent: CareEvent | null = null;
-      // 1. Explicit visitId linkage first
       if (e.visitId) {
         parent = milestones.find((m) => m.id === e.visitId) || null;
       }
-      // 2. Proximity fallback: nearest preceding visit within 14 days
       if (!parent) {
         for (const m of milestones) {
           const mt = parseDate(m.occurredAt).getTime();
@@ -262,8 +311,17 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
       }
     });
 
-  /* merge same-label children into one node with count; assign a staggered lane index and parent milestone */
-  interface ChildNode { id: string; label: string; kind: CareEvent['kind']; date: Date; count: number; ids: string[]; lane: number; parent: string }
+  interface ChildNode {
+    id: string;
+    label: string;
+    kind: CareEvent['kind'];
+    date: Date;
+    count: number;
+    ids: string[];
+    lane: number;
+    parent: string;
+    events: CareEvent[];
+  }
   const childNodes: ChildNode[] = [];
   milestones.forEach((m) => {
     const groups = new Map<string, CareEvent[]>();
@@ -274,11 +332,20 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     let li = 0;
     groups.forEach((arr) => {
       const first = arr[0];
-      childNodes.push({ id: first.id, label: first.label, kind: first.kind, date: parseDate(first.occurredAt), count: arr.length, ids: arr.map((a) => a.id), lane: li++, parent: m.id });
+      childNodes.push({
+        id: first.id,
+        label: first.label,
+        kind: first.kind,
+        date: parseDate(first.occurredAt),
+        count: arr.length,
+        ids: arr.map((a) => a.id),
+        lane: li++,
+        parent: m.id,
+        events: arr,
+      });
     });
   });
 
-  // Group orphan / standalone events (e.g. when Office Visits is filtered out or event occurred without a visit)
   const orphanGroups = new Map<string, CareEvent[]>();
   orphans.forEach((e) => {
     const key = `${e.kind}::${e.label}`;
@@ -296,66 +363,164 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
       ids: arr.map((a) => a.id),
       lane: orphanLi++,
       parent: 'axis',
+      events: arr,
     });
   });
 
-  /* ---- PACK §7.3 layout: children hang in their parent milestone's column,
-   * staggered so nothing collides; labels truncate; lanes are capped and
-   * overflow collapses into a "+N more" chip that zooms to the milestone. ---- */
-  const MAX_LABEL_W = 104;
-  const MAX_LANES = 2;
-  const labelW = (label: string) => Math.min(MAX_LABEL_W, label.length * 6.0);
+  /* ---- PACK §7.3 Non-colliding layout engine ---- */
+  const MAX_LABEL_W = 108;
+  const MAX_LANES = 3;
+  const labelW = (label: string) => Math.min(MAX_LABEL_W, Math.max(34, label.length * 6.5));
+
+  interface PlacedItem {
+    c: ChildNode;
+    x: number;
+    y: number;
+    isImg: boolean;
+    flip: boolean;
+    fp: [number, number];
+    h: number;
+    lane: number;
+  }
+
+  interface OverflowItem {
+    id: string;
+    parent: string;
+    count: number;
+    events: CareEvent[];
+    x: number;
+    y: number;
+    lane: number;
+    flip: boolean;
+  }
+
   const laid = (() => {
-    const parentX = new Map(milestones.map((m) => {
-      const cl = clusterOfMilestone.get(m.id);
-      return [m.id, cl ? cl.cx : tx(parseDate(m.occurredAt))] as const;
-    }));
-    const items = childNodes.map((c) => {
-      const px = c.parent === 'axis' ? tx(c.date) : (parentX.get(c.parent) ?? tx(c.date));
-      const isImg = c.kind === 'imaging';
-      // raw date position, pulled into the parent's column, then kept inside the canvas
-      let x = c.parent === 'axis' ? tx(c.date) : Math.min(Math.max(tx(c.date), px - 22), px + 70);
-      if (isImg) x = Math.max(84, Math.min(x, width - 84));
-      else x = Math.max(26, Math.min(x, width - Math.max(26, labelW(c.label) + 34)));
-      return { c, x: Math.round(x), isImg };
+    const parentX = new Map(
+      milestones.map((m) => {
+        const cl = clusterOfMilestone.get(m.id);
+        return [m.id, cl ? cl.cx : tx(parseDate(m.occurredAt))] as const;
+      })
+    );
 
-    }).sort((a, b) => a.x - b.x);
+    const childrenByParent = new Map<string, ChildNode[]>();
+    for (const c of childNodes) {
+      const arr = childrenByParent.get(c.parent) || [];
+      arr.push(c);
+      childrenByParent.set(c.parent, arr);
+    }
 
-    type Placed = { c: ChildNode; x: number; isImg: boolean; flip: boolean; fp: [number, number]; h: number; lane: number };
-    const placed: Placed[] = [];
+    const placed: PlacedItem[] = [];
     const laneSpans: Array<Array<[number, number]>> = [];
     const laneHeights: number[] = [];
-    const overflow = new Map<string, number>();
+    const overflowItems: OverflowItem[] = [];
 
-    for (const { c, x, isImg } of items) {
-      const lw = labelW(c.label);
-      const flip = !isImg && x + 20 + lw > width - 10 && x - 20 - lw > 10;
-      const fp: [number, number] = isImg
-        ? [x - 76, x + 76]
-        : flip ? [x - 20 - lw, x + 18] : [x - 18, x + 20 + lw];
-      const h = isImg ? 158 : 34;
-      let lane = -1;
-      for (let i = 0; i < laneSpans.length; i++) {
-        if (laneSpans[i].every(([l, r]) => fp[1] < l - 8 || fp[0] > r + 8)) { lane = i; break; }
+    const fitsInLane = (laneIdx: number, span: [number, number]) => {
+      if (laneIdx >= laneSpans.length) return true;
+      return laneSpans[laneIdx].every(([l, r]) => span[1] < l - 14 || span[0] > r + 14);
+    };
+
+    const addToLane = (laneIdx: number, span: [number, number], h: number) => {
+      while (laneSpans.length <= laneIdx) {
+        laneSpans.push([]);
+        laneHeights.push(0);
       }
-      if (lane === -1) {
-        if (laneSpans.length >= MAX_LANES) { overflow.set(c.parent, (overflow.get(c.parent) || 0) + 1); continue; }
-        lane = laneSpans.length; laneSpans.push([]); laneHeights.push(0);
+      laneSpans[laneIdx].push(span);
+      laneHeights[laneIdx] = Math.max(laneHeights[laneIdx], h);
+    };
+
+    const sortedParents = Array.from(childrenByParent.keys()).sort((a, b) => {
+      const xa = a === 'axis' ? (childrenByParent.get(a)?.[0] ? tx(childrenByParent.get(a)![0].date) : 0) : (parentX.get(a) ?? 0);
+      const xb = b === 'axis' ? (childrenByParent.get(b)?.[0] ? tx(childrenByParent.get(b)![0].date) : 0) : (parentX.get(b) ?? 0);
+      return xa - xb;
+    });
+
+    for (const pid of sortedParents) {
+      const nodes = childrenByParent.get(pid) || [];
+      const isAxis = pid === 'axis';
+      const px = isAxis ? (nodes[0] ? tx(nodes[0].date) : 60) : (parentX.get(pid) ?? 60);
+
+      const maxLw = Math.max(...nodes.map((n) => labelW(n.label)), 60);
+      const flip = px + 24 + maxLw + 32 > width - 16 && px - 24 - maxLw - 32 > 16;
+      const childX = flip ? px - 24 : px + 24;
+
+      let milestoneLastLane = -1;
+      const overflowEvents: CareEvent[] = [];
+
+      for (let idx = 0; idx < nodes.length; idx++) {
+        const c = nodes[idx];
+        const isImg = c.kind === 'imaging';
+        const lw = labelW(c.label);
+        const h = isImg ? 158 : 34;
+
+        const fp: [number, number] = isImg
+          ? [childX - 76, childX + 76]
+          : flip
+          ? [childX - lw - 26, childX + 18]
+          : [childX - 18, childX + lw + 26];
+
+        let targetLane = milestoneLastLane + 1;
+        while (targetLane < MAX_LANES && !fitsInLane(targetLane, fp)) {
+          targetLane++;
+        }
+
+        if (targetLane < MAX_LANES) {
+          addToLane(targetLane, fp, h);
+          milestoneLastLane = targetLane;
+          placed.push({
+            c,
+            x: Math.round(childX),
+            y: 0,
+            isImg,
+            flip,
+            fp,
+            h,
+            lane: targetLane,
+          });
+        } else {
+          overflowEvents.push(...c.events);
+        }
       }
-      laneSpans[lane].push(fp);
-      laneHeights[lane] = Math.max(laneHeights[lane], h);
-      placed.push({ c, x, isImg, flip, fp, h, lane });
+
+      if (overflowEvents.length > 0) {
+        const ovLane = Math.min(milestoneLastLane + 1, MAX_LANES);
+        const ovSpan: [number, number] = flip ? [childX - 74, childX + 10] : [childX - 10, childX + 74];
+        addToLane(ovLane, ovSpan, 30);
+        overflowItems.push({
+          id: `ov-${pid}`,
+          parent: pid,
+          count: overflowEvents.length,
+          events: overflowEvents,
+          x: Math.round(childX),
+          y: 0,
+          lane: ovLane,
+          flip,
+        });
+      }
     }
 
     const laneTops: number[] = [];
-    let y = 96;
-    for (let i = 0; i < laneSpans.length; i++) { laneTops.push(y); y += laneHeights[i] + 18; }
+    let curY = 96;
+    for (let i = 0; i < laneSpans.length; i++) {
+      laneTops.push(curY);
+      curY += (laneHeights[i] || 34) + 18;
+    }
+
     const pos = new Map<string, { x: number; y: number; flip: boolean }>();
-    for (const p of placed) pos.set(p.c.id, { x: p.x, y: laneTops[p.lane] ?? 96, flip: p.flip });
-    const canvasH = Math.max(250, (laneTops.length ? laneTops[laneTops.length - 1] + laneHeights[laneHeights.length - 1] : 130) + 36);
-    // last usable lane top, for the overflow chip
-    const chipY = (laneTops.length ? laneTops[Math.min(laneTops.length, MAX_LANES) - 1] : 96) + 2;
-    return { pos, canvasH, overflow, chipY };
+    for (const p of placed) {
+      p.y = laneTops[p.lane] ?? 96;
+      pos.set(p.c.id, { x: p.x, y: p.y, flip: p.flip });
+    }
+
+    for (const ov of overflowItems) {
+      ov.y = (laneTops[ov.lane] ?? curY) + 4;
+    }
+
+    const canvasH = Math.max(
+      265,
+      (laneTops.length ? laneTops[laneTops.length - 1] + (laneHeights[laneHeights.length - 1] || 34) : 130) + 44
+    );
+
+    return { pos, placed, overflowItems, canvasH, laneTops };
   })();
 
   /* density buckets on axis (weekly) */
@@ -368,7 +533,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
   const viewMonths = d3.timeMonths(viewStart, viewEnd);
   const actualCanvasH = isL3 ? Math.max(460, laid.canvasH + 160) : laid.canvasH;
 
-  /* ---- scrubber geometry ---- */
+  /* scrubber geometry */
   const totalSpan = Math.max(fullMax.getTime() - fullMin.getTime(), DAY);
   const winPctLeft = ((viewStart.getTime() - fullMin.getTime()) / totalSpan) * 100;
   const winPctWidth = ((viewEnd.getTime() - viewStart.getTime()) / totalSpan) * 100;
@@ -406,10 +571,38 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
     window.addEventListener('pointerup', onUp);
   };
 
-  const selected = events.find((e) => e.id === selectedId);
+  /* Popover positioning computation */
+  const popoverPosition = (() => {
+    if (!activePopover) return { left: 0, top: 0 };
+    const cardW = 320;
+    const cardH = 210;
+
+    let left = activePopover.anchor.x - cardW / 2;
+    if (left < 16) left = 16;
+    if (left + cardW > width - 16) left = width - cardW - 16;
+
+    let top: number;
+    if (activePopover.anchor.y + 36 + cardH <= actualCanvasH - 12) {
+      top = activePopover.anchor.y + 30;
+    } else if (activePopover.anchor.y - cardH - 14 >= 12) {
+      top = activePopover.anchor.y - cardH - 10;
+    } else {
+      top = Math.max(12, Math.min(actualCanvasH - cardH - 12, activePopover.anchor.y - cardH / 2));
+    }
+
+    return { left, top };
+  })();
+
+  const getTargetTab = (kind: PopoverTarget['kind']): string | null => {
+    if (kind === 'medication') return 'Medications';
+    if (kind === 'lab') return 'Labs';
+    if (kind === 'visit' || kind === 'milestone') return 'Visits';
+    if (kind === 'imaging') return 'Imaging';
+    return null;
+  };
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
       {/* header row: zoom + range readout + Lens toggle */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
@@ -464,7 +657,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           <div key={i} className="absolute w-px top-0 bottom-0" style={{ left: tx(m), background: 'var(--color-border-hairline)', opacity: 0.55 }} />
         ))}
 
-        {/* connectors (behind nodes) */}
+        {/* Soft, smooth, curvy wires connecting milestones / axis to child nodes and overflow chips */}
         {showChildren && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none" fill="none">
             {childNodes.map((c) => {
@@ -477,17 +670,40 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                 if (!pm) return null;
                 const cl = clusterOfMilestone.get(pm.id);
                 mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
-                my = AXIS_Y + 20;
+                my = AXIS_Y + nodeD / 2;
               }
               const cx = p.x;
-              const nodeTop = p.y + (c.kind === 'imaging' ? 2 : 1);
+              const nodeTop = p.y + (c.kind === 'imaging' ? 2 : 16);
 
               return (
                 <path
                   key={`c-${c.id}`}
-                  d={`M ${mx} ${my} C ${mx} ${my + (nodeTop - my) * 0.55}, ${cx} ${nodeTop - (nodeTop - my) * 0.55}, ${cx} ${nodeTop}`}
+                  d={`M ${mx} ${my} C ${mx} ${(my + nodeTop) / 2}, ${cx} ${(my + nodeTop) / 2}, ${cx} ${nodeTop}`}
                   stroke="var(--color-border-hairline)"
                   strokeWidth={1.2}
+                  strokeLinecap="round"
+                  strokeDasharray={c.parent === 'axis' ? '2 2' : undefined}
+                />
+              );
+            })}
+
+            {/* Curvy wires connecting milestones to overflow "+N more" items */}
+            {laid.overflowItems.map((ov) => {
+              const pm = milestones.find((m) => m.id === ov.parent);
+              if (!pm) return null;
+              const cl = clusterOfMilestone.get(pm.id);
+              const mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
+              const my = AXIS_Y + nodeD / 2;
+              const cx = ov.x;
+              const nodeTop = ov.y + 12;
+
+              return (
+                <path
+                  key={`ov-conn-${ov.id}`}
+                  d={`M ${mx} ${my} C ${mx} ${(my + nodeTop) / 2}, ${cx} ${(my + nodeTop) / 2}, ${cx} ${nodeTop}`}
+                  stroke="var(--color-border-hairline)"
+                  strokeWidth={1.2}
+                  strokeLinecap="round"
                 />
               );
             })}
@@ -523,23 +739,45 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           />
         ) : null)}
 
-        {/* orphan dots (no parent milestone) */}
+        {/* orphan dots on the axis */}
         {orphans.map((e) => (
           <div
             key={e.id}
-            className="absolute w-2 h-2 rounded-full bg-[var(--color-ink-muted)] cursor-pointer"
-            style={{ left: tx(parseDate(e.occurredAt)), top: AXIS_Y - 4, transform: 'translateX(-50%)' }}
+            className="absolute w-2.5 h-2.5 rounded-full bg-[var(--color-ink-muted)] cursor-pointer hover:scale-150 transition-transform"
+            style={{ left: tx(parseDate(e.occurredAt)), top: AXIS_Y - 5, transform: 'translateX(-50%)' }}
             title={e.label}
-            onClick={() => setSelectedId((p) => (p === e.id ? null : e.id))}
+            onClick={() => handleItemClick({
+              id: e.id,
+              kind: e.kind,
+              label: e.label,
+              summary: e.summary,
+              occurredAt: e.occurredAt,
+              createdBy: e.createdBy,
+              source: e.source,
+              anchor: { x: tx(parseDate(e.occurredAt)), y: AXIS_Y },
+            })}
           />
         ))}
 
-        {/* milestones: neon circles with document glyph, ON the axis;
-            close visits merge into a counted cluster that zooms on click (§7.3) */}
+        {/* milestones: neon circles with document glyph, ON the axis */}
         {milestoneClusters.map((cl, ci) => {
           const single = cl.items.length === 1 ? cl.items[0] : null;
-          const sel = single ? selectedId === single.id : false;
+          const isSelected = single ? selectedId === single.id : false;
           const zoom = () => clampView(cl.t0 - 15 * DAY, cl.t1 + 15 * DAY);
+
+          const milestoneTarget: PopoverTarget | null = single
+            ? {
+                id: single.id,
+                kind: 'milestone',
+                label: single.label,
+                summary: single.summary,
+                occurredAt: single.occurredAt,
+                createdBy: single.createdBy,
+                source: single.source,
+                anchor: { x: cl.cx, y: AXIS_Y },
+              }
+            : null;
+
           return (
             <motion.div
               key={`mc-${ci}`}
@@ -549,18 +787,24 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
               tabIndex={0}
               role="button"
               aria-label={single ? single.label : `${cl.items.length} visits — click to zoom in`}
-              onClick={() => (single ? setSelectedId((p) => (p === single.id ? null : single.id)) : zoom())}
+              onClick={() => {
+                if (single && milestoneTarget) {
+                  handleItemClick(milestoneTarget);
+                } else {
+                  zoom();
+                }
+              }}
               onDoubleClick={zoom}
             >
               <div
-                className={`relative rounded-full bg-[var(--color-accent-neon)] flex items-center justify-center shadow-md transition-all ${sel ? 'ring-4 ring-[var(--color-accent-neon)]/40 ring-offset-2 ring-offset-[var(--color-surface-subtle)]' : ''}`}
+                className={`relative rounded-full bg-[var(--color-accent-neon)] flex items-center justify-center shadow-md transition-all ${isSelected ? 'ring-4 ring-[var(--color-accent-neon)]/40 ring-offset-2 ring-offset-[var(--color-surface-subtle)]' : ''}`}
                 style={{ width: nodeD, height: nodeD }}
               >
                 <div className="text-[var(--color-ink)]" style={{ width: nodeD * 0.52, height: nodeD * 0.52 }}>
                   <DocGlyph className="w-full h-full" />
                 </div>
-                {!single && (
-                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--color-ink)] text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                {cl.items.length > 1 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[var(--color-ink)] text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
                     {cl.items.length}
                   </span>
                 )}
@@ -569,31 +813,16 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           );
         })}
 
-        {/* ===================== L3 EXPANDED MILESTONE LENS (ref-1) ===================== */}
-        {isL3 && milestones.map((m, mi) => {
-          const x = tx(parseDate(m.occurredAt));
-          if (x < -250 || x > width + 250) return null;
+        {/* L3 Lens: Milestone Expansion Containers */}
+        {isL3 && milestones.map((m) => {
+          const cx = tx(parseDate(m.occurredAt));
+          const stackWidth = Math.min(Math.max(width * 0.52, 420), 540);
+          const leftPos = Math.max(16, Math.min(cx - stackWidth / 2, width - stackWidth - 16));
 
-          const prevM = mi > 0 ? milestones[mi - 1] : null;
-          const intervalLabel = prevM
-            ? (() => {
-                const diffDays = Math.round((parseDate(m.occurredAt).getTime() - parseDate(prevM.occurredAt).getTime()) / DAY);
-                if (diffDays <= 0) return 'Same day';
-                if (diffDays === 1) return '1 day since previous visit';
-                if (diffDays < 7) return `${diffDays} days since previous visit`;
-                const weeks = Math.round(diffDays / 7);
-                if (weeks === 1) return '1 week since previous visit';
-                if (weeks < 8) return `${weeks} weeks since previous visit`;
-                const months = Math.round(diffDays / 30.4);
-                return `${months} month${months > 1 ? 's' : ''} since previous visit`;
-              })()
-            : 'Initial baseline encounter';
-
-          // Extract medications for this milestone
-          const visitMeds = (childrenByMilestone.get(m.id) || []).filter((e) => e.kind === 'medication');
-
-          const stackWidth = Math.min(width - 32, 600);
-          const leftPos = Math.max(16, Math.min(width - stackWidth - 16, x - stackWidth / 2));
+          const visitMeds = events.filter((e) => e.kind === 'medication' && (e.visitId === m.id || Math.abs(parseDate(e.occurredAt).getTime() - parseDate(m.occurredAt).getTime()) <= 14 * DAY));
+          const prevM = milestones.filter((pm) => parseDate(pm.occurredAt) < parseDate(m.occurredAt)).pop();
+          const daysSincePrev = prevM ? Math.round((parseDate(m.occurredAt).getTime() - parseDate(prevM.occurredAt).getTime()) / DAY) : null;
+          const intervalLabel = daysSincePrev ? `${daysSincePrev} days since previous visit` : 'Initial visit encounter';
 
           return (
             <motion.div
@@ -605,7 +834,6 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
               className="absolute z-20 flex flex-col items-center"
               style={{ left: leftPos, top: AXIS_Y + nodeD / 2 + 10, width: stackWidth }}
             >
-              {/* Milestone Date & Interval Subtitle */}
               <div className="flex flex-col items-center mb-2.5 text-center">
                 <span className="text-xs font-bold text-[var(--color-ink)] tracking-tight">
                   {d3.timeFormat('%d %B %Y')(parseDate(m.occurredAt))} &middot; {m.label}
@@ -615,9 +843,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                 </span>
               </div>
 
-              {/* L3 Module Container */}
               <div className="w-full flex flex-wrap md:flex-nowrap items-stretch justify-center gap-3 bg-white/95 backdrop-blur-xs p-3 rounded-[20px] border border-[var(--color-border-hairline)] shadow-sm">
-                {/* Left Stack: Medication Chips */}
                 <div className="flex flex-col gap-2 min-w-[190px] flex-1 justify-center">
                   <div className="flex items-center justify-between pb-1 border-b border-stone-100">
                     <span className="text-[9.5px] font-bold uppercase tracking-wider text-[var(--color-ink-muted)]">
@@ -634,7 +860,15 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                         name={med.label}
                         dosage="Oral"
                         dosesPerDay={med.label.includes('×2') ? 2 : 1}
-                        onClick={() => setSelectedId(med.id)}
+                        onClick={() => handleItemClick({
+                          id: med.id,
+                          kind: 'medication',
+                          label: med.label,
+                          summary: med.summary,
+                          occurredAt: med.occurredAt,
+                          createdBy: med.createdBy,
+                          anchor: { x: leftPos + stackWidth / 4, y: AXIS_Y + 110 },
+                        })}
                       />
                     ))
                   ) : (
@@ -643,19 +877,34 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                         name="Lisinopril"
                         dosage="10mg once daily"
                         dosesPerDay={1}
-                        onClick={() => setSelectedId(m.id)}
+                        onClick={() => handleItemClick({
+                          id: m.id,
+                          kind: 'medication',
+                          label: 'Lisinopril 10mg',
+                          summary: 'Antihypertensive regimen.',
+                          occurredAt: m.occurredAt,
+                          createdBy: m.createdBy,
+                          anchor: { x: leftPos + stackWidth / 4, y: AXIS_Y + 110 },
+                        })}
                       />
                       <MedicationChip
                         name="Metformin"
                         dosage="500mg with meals"
                         dosesPerDay={2}
-                        onClick={() => setSelectedId(m.id)}
+                        onClick={() => handleItemClick({
+                          id: m.id,
+                          kind: 'medication',
+                          label: 'Metformin 500mg',
+                          summary: 'Glycemic support with meals.',
+                          occurredAt: m.occurredAt,
+                          createdBy: m.createdBy,
+                          anchor: { x: leftPos + stackWidth / 4, y: AXIS_Y + 140 },
+                        })}
                       />
                     </>
                   )}
                 </div>
 
-                {/* Right Stack: Metric Cards */}
                 <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
                   <MetricCard
                     title="Blood Pressure"
@@ -665,7 +914,14 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                     averageValue="126/80"
                     deltaValue="-6 mmHg"
                     deltaDirection="improving"
-                    onExpand={() => setSelectedId(m.id)}
+                    onExpand={() => handleItemClick({
+                      id: `${m.id}-bp`,
+                      kind: 'metric',
+                      label: 'Blood Pressure Telemetry',
+                      summary: 'Encounter reading 128/82 mmHg. Period average 126/80 mmHg with improving delta.',
+                      occurredAt: m.occurredAt,
+                      anchor: { x: leftPos + (stackWidth * 3) / 4, y: AXIS_Y + 110 },
+                    })}
                     className="w-[210px] sm:w-[220px]"
                   />
                   <MetricCard
@@ -676,7 +932,14 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                     averageValue="110"
                     deltaValue="-12 mg/dL"
                     deltaDirection="improving"
-                    onExpand={() => setSelectedId(m.id)}
+                    onExpand={() => handleItemClick({
+                      id: `${m.id}-glucose`,
+                      kind: 'metric',
+                      label: 'Fasting Glucose Telemetry',
+                      summary: 'Encounter reading 104 mg/dL. Glycemic stability confirmed.',
+                      occurredAt: m.occurredAt,
+                      anchor: { x: leftPos + (stackWidth * 3) / 4, y: AXIS_Y + 110 },
+                    })}
                     className="w-[210px] sm:w-[220px]"
                   />
                 </div>
@@ -685,27 +948,48 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           );
         })}
 
-        {/* child nodes: medication pills, labs, imaging card */}
+        {/* L2 Child nodes: medication pills, labs, imaging card */}
         {showChildren && childNodes.map((c) => {
           const p = laid.pos.get(c.id);
-          if (!p) return null; // collapsed into the parent's "+N more" chip
+          if (!p) return null;
           const x = p.x;
           const y = p.y;
-          const sel = selectedId === c.id;
+          const isSelected = selectedId === c.id;
           const isImaging = c.kind === 'imaging';
+
+          const target: PopoverTarget = {
+            id: c.id,
+            kind: c.kind,
+            label: c.label,
+            summary: c.events[0]?.summary || '',
+            occurredAt: c.events[0]?.occurredAt || '',
+            createdBy: c.events[0]?.createdBy || '',
+            source: c.events[0]?.source || '',
+            count: c.count,
+            events: c.events,
+            anchor: { x, y },
+          };
 
           if (isImaging) {
             return (
-              <div key={c.id} className="absolute z-20" style={{ left: x, top: y, transform: 'translateX(-50%)' }}>
+              <div
+                key={c.id}
+                className="absolute z-20"
+                style={{ left: x, top: y, transform: 'translateX(-50%)' }}
+              >
                 <div className="w-[1.5px] h-4 bg-[var(--color-border-hairline)] mx-auto" />
                 <div className="w-2 h-2 rounded-full bg-[var(--color-accent-neon)] mx-auto -mt-px" />
-                <motion.div whileHover={{ y: -3 }} className="mt-1 relative w-36 h-32 rounded-[18px] overflow-hidden bg-[var(--color-ink)] cursor-pointer" onClick={() => setSelectedId((p) => (p === c.id ? null : c.id))}>
+                <motion.div
+                  whileHover={{ y: -3 }}
+                  className="mt-1 relative w-36 h-32 rounded-[18px] overflow-hidden bg-[var(--color-ink)] cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+                  onClick={() => handleItemClick(target)}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/mri-scan.jpg" alt={c.label} className="w-full h-full object-cover" draggable={false} />
                   <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-[9px] font-bold tracking-wide">MRI</span>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }}
+                    onClick={(e) => { e.stopPropagation(); handleItemClick(target); }}
                     className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[var(--color-ink)] text-white flex items-center justify-center hover:bg-black transition-colors"
                     title="Inspect study"
                   >
@@ -719,17 +1003,21 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           const Glyph = c.kind === 'medication' ? PillGlyph : FlaskGlyph;
           const accent = c.kind === 'medication';
           return (
-            <div key={c.id} className="absolute z-10" style={{ left: p.flip ? x + 16 : x, top: y, transform: p.flip ? 'translateX(-100%)' : 'translateX(-16px)' }}>
+            <div
+              key={c.id}
+              className="absolute z-10"
+              style={{ left: p.flip ? x + 16 : x, top: y, transform: p.flip ? 'translateX(-100%)' : 'translateX(-16px)' }}
+            >
               <motion.div
-                whileHover={{ scale: 1.06 }}
-                className={`flex items-center gap-1.5 cursor-pointer ${p.flip ? 'flex-row-reverse' : ''}`}
+                whileHover={{ scale: 1.05 }}
+                className={`flex items-center gap-1.5 cursor-pointer py-0.5 px-1 rounded-full hover:bg-black/5 transition-colors ${p.flip ? 'flex-row-reverse' : ''}`}
                 role="button"
                 tabIndex={0}
                 aria-label={c.label}
-                onClick={() => setSelectedId((p) => (p === c.id ? null : c.id))}
-                onKeyDown={(e) => { if (e.key === 'Enter') setSelectedId((p) => (p === c.id ? null : c.id)); }}
+                onClick={() => handleItemClick(target)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleItemClick(target); }}
               >
-                <div className={`relative w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${accent ? 'bg-[var(--color-accent-neon)] border-transparent text-[var(--color-ink)]' : 'bg-white border-[var(--color-border-hairline)] text-[var(--color-ink-muted)]'} ${sel ? 'ring-4 ring-[var(--color-accent-neon)]/40' : ''}`}>
+                <div className={`relative w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${accent ? 'bg-[var(--color-accent-neon)] border-transparent text-[var(--color-ink)]' : 'bg-white border-[var(--color-border-hairline)] text-[var(--color-ink-muted)]'} ${isSelected ? 'ring-4 ring-[var(--color-accent-neon)]/40' : ''}`}>
                   <Glyph className="w-4 h-4" />
                   {c.count > 1 && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--color-accent-neon)] border border-white text-[var(--color-ink)] text-[9px] font-bold flex items-center justify-center">
@@ -737,7 +1025,7 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-semibold text-[var(--color-ink)] leading-tight truncate max-w-[104px]" title={c.label}>
+                <span className="text-[10.5px] font-semibold text-[var(--color-ink)] leading-tight truncate max-w-[108px]" title={c.label}>
                   {c.label}
                 </span>
               </motion.div>
@@ -745,41 +1033,51 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           );
         })}
 
-        {/* collapsed overflow per milestone: "+N more" zooms to that visit */}
-        {showChildren && Array.from(laid.overflow.entries()).map(([pid, n]) => {
-          if (!n) return null;
-          if (pid === 'axis') {
-            return (
-              <button
-                key="ov-axis"
-                type="button"
-                onClick={() => zoomSimple(1.5)}
-                className="absolute z-10 px-2 py-0.5 rounded-full bg-white border border-[var(--color-border-hairline)] text-[9px] font-bold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
-                style={{ right: 60, top: laid.chipY + 6 }}
-                title="More events — click to zoom in"
-              >
-                +{n} more
-              </button>
-            );
-          }
-          const pm = milestones.find((m) => m.id === pid);
-          if (!pm) return null;
-          const cl = clusterOfMilestone.get(pid);
-          const x = cl ? cl.cx : tx(parseDate(pm.occurredAt));
+        {/* Non-overlapping "+N more" overflow indicators (rendered on their own dedicated lane) */}
+        {showChildren && laid.overflowItems.map((ov) => {
+          const pm = milestones.find((m) => m.id === ov.parent);
+          const cl = pm ? clusterOfMilestone.get(pm.id) : null;
+
+          const target: PopoverTarget = {
+            id: ov.id,
+            kind: 'overflow',
+            label: `+${ov.count} more events at this visit`,
+            summary: `Visit encounter includes ${ov.count} additional clinical events. Click to view breakdown or zoom into this visit.`,
+            events: ov.events,
+            anchor: { x: ov.x, y: ov.y },
+          };
+
+          const handleZoom = () => {
+            if (cl) clampView(cl.t0 - 30 * DAY, cl.t1 + 30 * DAY);
+            else if (pm) {
+              const t = parseDate(pm.occurredAt).getTime();
+              clampView(t - 30 * DAY, t + 30 * DAY);
+            } else {
+              zoomSimple(1.5);
+            }
+          };
+
           return (
-            <button
-              key={`ov-${pid}`}
-              type="button"
-              onClick={() => {
-                if (cl) clampView(cl.t0 - 30 * DAY, cl.t1 + 30 * DAY);
-                else { const t = parseDate(pm.occurredAt).getTime(); clampView(t - 30 * DAY, t + 30 * DAY); }
+            <div
+              key={ov.id}
+              className="absolute z-10"
+              style={{
+                left: ov.flip ? ov.x + 16 : ov.x,
+                top: ov.y,
+                transform: ov.flip ? 'translateX(-100%)' : 'translateX(-16px)',
               }}
-              className="absolute z-10 px-2 py-0.5 rounded-full bg-white border border-[var(--color-border-hairline)] text-[9px] font-bold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
-              style={{ left: Math.min(x + 78, width - 64), top: laid.chipY + 6 }}
-              title="More events at this visit — click to zoom in"
             >
-              +{n} more
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleItemClick(target);
+                }}
+                className="px-2.5 py-1 rounded-full bg-white border border-[var(--color-border-hairline)] hover:border-[var(--color-ink)] text-[10px] font-bold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] shadow-xs transition-all hover:scale-105 flex items-center gap-1 cursor-pointer"
+                title={`+${ov.count} more events — click to view`}
+              >
+                <span>+{ov.count} more</span>
+              </button>
+            </div>
           );
         })}
 
@@ -787,60 +1085,199 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
         <button
           type="button"
           onClick={onAddEntry}
-          className="absolute z-20 w-10 h-10 rounded-full bg-white border border-[var(--color-border-hairline)] flex items-center justify-center hover:bg-stone-50 transition-colors"
+          className="absolute z-20 w-10 h-10 rounded-full bg-white border border-[var(--color-border-hairline)] flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
           style={{ right: 10, top: AXIS_Y - 20 }}
           title="Add clinical event"
         >
           <Plus className="w-4 h-4 text-[var(--color-ink)]" />
         </button>
 
-        {/* month labels along the bottom (abbreviated + year when the span is long) */}
+        {/* month labels along the bottom */}
         {viewMonths.map((m: Date, i: number) => (
           <span key={i} className="absolute bottom-2 text-[11px] font-medium text-[var(--color-ink-muted)]" style={{ left: tx(m) + 6 }}>
             {viewMonths.length > 8 ? d3.timeFormat(m.getMonth() === 0 ? '%b %Y' : '%b')(m) : d3.timeFormat('%B')(m)}
           </span>
         ))}
+
+        {/* ===================== FLOATING ANCHORED DETAIL POPOVER ===================== */}
+        <AnimatePresence>
+          {activePopover && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 3 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 3 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute z-50 w-80 max-w-[92vw] bg-white/95 backdrop-blur-md rounded-[22px] p-4 border border-[var(--color-border-hairline)] shadow-2xl shadow-black/15 pointer-events-auto"
+              style={{
+                left: popoverPosition.left,
+                top: popoverPosition.top,
+              }}
+              role="dialog"
+              aria-label={activePopover.label}
+            >
+              {/* Header row */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                    activePopover.kind === 'medication' || activePopover.kind === 'milestone' || activePopover.kind === 'visit'
+                      ? 'bg-[var(--color-accent-neon)] text-[var(--color-ink)]'
+                      : activePopover.kind === 'lab'
+                      ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                      : 'bg-slate-100 text-slate-700 border border-slate-200'
+                  }`}>
+                    {activePopover.kind === 'medication' ? (
+                      <PillGlyph className="w-3.5 h-3.5" />
+                    ) : activePopover.kind === 'lab' ? (
+                      <FlaskGlyph className="w-3.5 h-3.5" />
+                    ) : activePopover.kind === 'overflow' ? (
+                      <Layers className="w-3.5 h-3.5" />
+                    ) : (
+                      <DocGlyph className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-ink-muted)]">
+                    {activePopover.kind === 'medication'
+                      ? 'Prescription Regimen'
+                      : activePopover.kind === 'lab'
+                      ? 'Laboratory Result'
+                      : activePopover.kind === 'imaging'
+                      ? 'Diagnostic Imaging'
+                      : activePopover.kind === 'overflow'
+                      ? 'Visit Overflow'
+                      : 'Clinical Encounter'}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePopover(null);
+                    setSelectedId(null);
+                  }}
+                  className="w-6 h-6 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close details"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Title & Metadata */}
+              <div className="mt-2 min-w-0">
+                <h4 className="text-sm font-bold text-[var(--color-ink)] leading-snug truncate">
+                  {activePopover.label}
+                </h4>
+                <div className="text-[11px] text-[var(--color-ink-muted)] flex items-center gap-1.5 mt-0.5">
+                  {activePopover.occurredAt && <span>{activePopover.occurredAt}</span>}
+                  {activePopover.occurredAt && activePopover.createdBy && <span>&middot;</span>}
+                  {activePopover.createdBy && <span>{activePopover.createdBy}</span>}
+                </div>
+              </div>
+
+              {/* Clinical summary explanation */}
+              {activePopover.summary && (
+                <div className="mt-2.5 p-2.5 rounded-xl bg-[var(--color-surface-subtle)] border border-black/5 text-xs text-[var(--color-ink)]/85 leading-relaxed">
+                  {activePopover.summary}
+                </div>
+              )}
+
+              {/* Grouped items list (e.g. multi-dose medications or serial lab panels) */}
+              {activePopover.events && activePopover.events.length > 1 && activePopover.kind !== 'overflow' && (
+                <div className="mt-2.5 pt-2 border-t border-[var(--color-border-hairline)]">
+                  <span className="text-[10px] font-bold uppercase text-[var(--color-ink-muted)] tracking-wider">
+                    {activePopover.events.length} Recorded Entries:
+                  </span>
+                  <div className="mt-1.5 space-y-1 max-h-24 overflow-y-auto pr-1">
+                    {activePopover.events.map((evItem, idx) => (
+                      <div key={evItem.id || idx} className="text-[10.5px] text-[var(--color-ink-muted)] flex items-start gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-neon)] shrink-0 mt-1" />
+                        <div className="min-w-0">
+                          <span className="font-semibold text-[var(--color-ink)]">{evItem.occurredAt}: </span>
+                          <span>{evItem.summary || evItem.label}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Overflow items breakdown */}
+              {activePopover.kind === 'overflow' && activePopover.events && (
+                <div className="mt-2.5 pt-2 border-t border-[var(--color-border-hairline)]">
+                  <span className="text-[10px] font-bold uppercase text-[var(--color-ink-muted)] tracking-wider">
+                    Additional Events at this Visit:
+                  </span>
+                  <div className="mt-1.5 space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {activePopover.events.map((evItem, idx) => (
+                      <div key={evItem.id || idx} className="text-xs p-1.5 rounded-lg bg-[var(--color-surface-subtle)] flex items-center justify-between gap-2">
+                        <span className="font-medium text-[var(--color-ink)] truncate">{evItem.label}</span>
+                        <span className="text-[9.5px] uppercase font-bold text-[var(--color-ink-muted)] px-1.5 py-0.5 rounded bg-white shrink-0">{evItem.kind}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Link Footer */}
+              <div className="mt-3 pt-2 border-t border-[var(--color-border-hairline)] flex items-center justify-between">
+                {getTargetTab(activePopover.kind) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tab = getTargetTab(activePopover.kind);
+                      if (tab) onNavigateToTab?.(tab);
+                      setActivePopover(null);
+                    }}
+                    className="text-xs font-bold text-[var(--color-ink)] hover:text-amber-800 flex items-center gap-1 group cursor-pointer transition-colors"
+                  >
+                    <span>Open in {getTargetTab(activePopover.kind)} tab</span>
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <span className="text-[10px] text-[var(--color-ink-muted)] font-mono">
+                  Esc to close
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ===================== SCRUBBER ===================== */}
-      <div className="mt-3 flex items-center gap-2.5">
-        <button type="button" onClick={() => zoomSimple(1 / 1.5)} className="w-8 h-8 shrink-0 rounded-full bg-white border border-[var(--color-border-hairline)] flex items-center justify-center text-[var(--color-ink)] font-bold" title="Zoom out">&minus;</button>
-        <button type="button" onClick={() => zoomSimple(1.5)} className="w-8 h-8 shrink-0 rounded-full bg-white border border-[var(--color-border-hairline)] flex items-center justify-center text-[var(--color-ink)] font-bold" title="Zoom in">+</button>
+      {/* ===================== SCRUBBER (ref-2) ===================== */}
+      <div className="mt-2.5 flex items-center gap-2 select-none">
+        <button type="button" onClick={() => zoomSimple(1.5)} className="w-8 h-8 rounded-full bg-white border border-[var(--color-border-hairline)] flex items-center justify-center text-[var(--color-ink)] hover:bg-stone-50 shadow-xs font-bold text-base cursor-pointer" title="Zoom in">+</button>
+        <button type="button" onClick={() => zoomSimple(1 / 1.5)} className="w-8 h-8 rounded-full bg-white border border-[var(--color-border-hairline)] flex items-center justify-center text-[var(--color-ink)] hover:bg-stone-50 shadow-xs font-bold text-base cursor-pointer" title="Zoom out">&minus;</button>
 
-        <div
-          ref={scrubberRef}
-          className="relative flex-1 h-11 bg-[var(--color-surface-subtle)] rounded-full border border-[var(--color-border-hairline)] select-none overflow-hidden"
-        >
-          {/* month ticks */}
-          {scrubMonths.map((m, i) => (
-            <div key={i} className="absolute top-0 bottom-0 w-px bg-[var(--color-border-hairline)]" style={{ left: `${((+m - +fullMin) / totalSpan) * 100}%` }} />
-          ))}
+        <div ref={scrubberRef} className="relative flex-1 h-11 bg-white rounded-full border border-[var(--color-border-hairline)] shadow-xs px-4 flex items-center overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none">
+            {scrubWeeks.map((w: Date, i: number) => {
+              const c = scrubWeekCount[i];
+              if (!c) return <div key={i} className="w-1" />;
+              const dots = Math.min(c, 4);
+              return (
+                <div key={i} className="flex flex-col items-center gap-0.5 justify-center h-full">
+                  {Array.from({ length: dots }).map((_, di) => (
+                    <span key={di} className="w-1 h-1 rounded-full bg-[var(--color-ink-muted)]" style={{ opacity: 0.35 + di * 0.18 }} />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
 
-          {/* weekly density dots + counts */}
-          {scrubWeeks.map((w, i) => scrubWeekCount[i] > 0 ? (
-            <div key={i} className="absolute top-1.5 flex flex-col items-center pointer-events-none" style={{ left: `${((+d3.timeWeek.offset(w, 0.5) - +fullMin) / totalSpan) * 100}%`, transform: 'translateX(-50%)' }}>
-              <span className="text-[8px] leading-none text-[var(--color-ink-muted)] font-medium">{scrubWeekCount[i]}</span>
-              <span className="mt-0.5 rounded-full bg-[var(--color-ink-muted)]" style={{ width: 3 + Math.min(scrubWeekCount[i], 4), height: 3 + Math.min(scrubWeekCount[i], 4) }} />
-            </div>
-          ) : null)}
+          <div className="absolute inset-x-6 bottom-1 flex justify-between pointer-events-none text-[9px] font-mono text-[var(--color-ink-muted)]">
+            {scrubMonths.filter((m: Date, i: number) => i % 3 === 0).map((m: Date, i: number) => (
+              <span key={i}>{d3.timeFormat('%b %y')(m)}</span>
+            ))}
+          </div>
 
-          {/* month labels */}
-          {scrubMonths.map((m, i) => (
-            <span key={i} className="absolute bottom-1 text-[9px] font-medium text-[var(--color-ink-muted)] pointer-events-none" style={{ left: `${((+m - +fullMin) / totalSpan) * 100}%`, marginLeft: 4 }}>
-              {d3.timeFormat('%b')(m)}
-            </span>
-          ))}
-
-          {/* dark visible-period window with rounded caps */}
           <div
-            className="absolute top-1 bottom-1 rounded-full bg-[var(--color-ink)] flex items-center justify-between px-1.5 shadow-md"
-            style={{ left: `${Math.max(0, Math.min(98, winPctLeft))}%`, width: `${Math.max(2, Math.min(100 - winPctLeft, winPctWidth))}%`, cursor: dragCap === 'move' ? 'grabbing' : 'grab' }}
+            className="absolute top-1 bottom-1 rounded-full bg-[var(--color-ink)] shadow-md flex items-center justify-between px-1.5 cursor-grab active:cursor-grabbing z-10"
+            style={{
+              left: `${Math.max(0, winPctLeft)}%`,
+              width: `${Math.min(100 - winPctLeft, Math.max(winPctWidth, 4))}%`,
+            }}
             onPointerDown={onScrubPointerDown('move')}
-            role="slider"
-            aria-label="Visible period"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(winPctLeft)}
           >
             <span
               className="w-1.5 h-4 rounded-full bg-white/70 cursor-ew-resize hover:bg-white"
@@ -860,33 +1297,6 @@ export function InteractiveTimeline({ careEvents, onAddEntry, activeFilters = ['
           </div>
         </div>
       </div>
-
-      {/* ===================== DETAIL DRAWER ===================== */}
-      <AnimatePresence>
-        {selected && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-3 w-full bg-white rounded-[20px] p-4 border border-[var(--color-border-hairline)] shadow-sm flex items-center justify-between gap-3"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${selected.kind === 'visit' ? 'bg-[var(--color-accent-neon)] text-[var(--color-ink)]' : selected.kind === 'medication' ? 'bg-[var(--color-accent-neon)] text-[var(--color-ink)]' : 'bg-[var(--color-surface-subtle)] text-[var(--color-ink-muted)] border border-[var(--color-border-hairline)]'}`}>
-                {selected.kind === 'medication' ? <PillGlyph className="w-4 h-4" /> : selected.kind === 'lab' ? <FlaskGlyph className="w-4 h-4" /> : selected.kind === 'imaging' ? <DocGlyph className="w-4 h-4" /> : <DocGlyph className="w-4 h-4" />}
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-sm font-bold text-[var(--color-ink)] truncate">{selected.label}</h4>
-                <p className="text-xs text-[var(--color-ink-muted)] line-clamp-2">{selected.summary}</p>
-                <span className="text-[10px] font-mono text-[var(--color-ink-muted)]">{selected.occurredAt} &middot; {selected.kind} &middot; {selected.createdBy}</span>
-              </div>
-            </div>
-            <button type="button" onClick={() => setSelectedId(null)} className="w-7 h-7 shrink-0 rounded-full bg-[var(--color-surface-subtle)] flex items-center justify-center text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]" aria-label="Close details">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="sr-only" aria-live="polite">
         Showing {d3.timeFormat('%d %b %Y')(viewStart)} to {d3.timeFormat('%d %b %Y')(viewEnd)}, {events.length} events

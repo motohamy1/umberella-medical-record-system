@@ -883,6 +883,8 @@ export function PaperPatientWorkspace({
               labs={labs}
               visits={visits}
               careEvents={careEvents}
+              allergies={allergies}
+              vitals={vitals}
               onShowOnTimeline={() => {
                 setActiveTab('Overview');
               }}
@@ -930,7 +932,7 @@ export function PaperPatientWorkspace({
           </div>
         </div>
 
-        <InteractiveTimeline careEvents={careEvents} onAddEntry={onAddEntry} activeFilters={activeFilters} />
+        <InteractiveTimeline careEvents={careEvents} onAddEntry={onAddEntry} activeFilters={activeFilters} onNavigateToTab={(tab) => setActiveTab(tab as any)} />
 
         {/* ========================================================================= */}
         {/* HEALTH RECORDS CARDS (BOTTOM SECTION - 3 SIGNATURE NOTCHED CARDS)         */}

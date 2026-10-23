@@ -29,10 +29,24 @@ import {
   TrendingUp,
   Activity,
   Heart,
+  Layers,
+  Zap,
+  Award,
+  Stethoscope,
+  Pill,
+  Gauge,
+  FilePlus,
 } from 'lucide-react';
 import { ModuleCard } from '@/components/cards/ModuleCard';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
 import type { Patient, CareEvent, Medication, LabResult, Visit } from '@/data/types';
+import {
+  generatePatientAICards,
+  generatePatientQuestionAnalytics,
+  type GeneratedAICard,
+  type QuestionAnalyticsItem as AnalyticsItem,
+} from '@/data/patientAIGenerator';
+import { generatePatientAIAnalyticsAction } from '@/data/actions';
 import { en } from '@/i18n/en';
 
 interface AIAnalyticsTabViewProps {
@@ -41,6 +55,8 @@ interface AIAnalyticsTabViewProps {
   labs?: LabResult[];
   visits?: Visit[];
   careEvents?: CareEvent[];
+  allergies?: unknown[];
+  vitals?: unknown[];
   onShowOnTimeline?: (dateStr?: string) => void;
   onSaveToNote?: (summaryText: string) => Promise<void>;
   dict?: typeof en.aiAnalytics;
@@ -49,14 +65,6 @@ interface AIAnalyticsTabViewProps {
 
 type QuestionKey = 'whatChanged' | 'whatMatters' | 'sinceLastVisit';
 
-interface AnalyticsItem {
-  id: string;
-  statement: string;
-  category: 'vitals' | 'meds' | 'labs' | 'adherence';
-  sourceTitle: string;
-  sourceDate: string;
-  significance: 'positive' | 'warning' | 'neutral';
-}
 
 export function AIAnalyticsTabView({
   patient,
@@ -70,119 +78,100 @@ export function AIAnalyticsTabView({
   className,
 }: AIAnalyticsTabViewProps) {
   const [selectedQuestion, setSelectedQuestion] = useState<QuestionKey>('whatChanged');
+  const [activeCardCategory, setActiveCardCategory] = useState<string>('all');
+  const [pendingSaveText, setPendingSaveText] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
   const [generatedAt, setGeneratedAt] = useState<string>('Just now');
   const [isConfirmSaveOpen, setIsConfirmSaveOpen] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
+  const [provenanceNote, setProvenanceNote] = useState<string | null>(null);
+  const [customCards, setCustomCards] = useState<GeneratedAICard[] | null>(null);
+  const [customQuestions, setCustomQuestions] = useState<Record<QuestionKey, AnalyticsItem[]> | null>(null);
+
   const hasClinicalData = (visits.length > 0 || medications.length > 0 || labs.length > 0);
 
-  // Dynamic analysis content derived from real patient records
-  const analyticsData: Record<QuestionKey, AnalyticsItem[]> = {
-    whatChanged: [
-      {
-        id: 'wc-1',
-        statement: 'Systolic blood pressure reduced from 152 to 122 mmHg following Amlodipine regimen titration to 10 mg.',
-        category: 'vitals',
-        sourceTitle: 'Clinic Visit & Telemetry',
-        sourceDate: 'Recent 60 days',
-        significance: 'positive',
-      },
-      {
-        id: 'wc-2',
-        statement: 'Glycemic control stabilized with Fasting Blood Glucose reaching 83 mg/dL, down from initial presentation of 168 mg/dL.',
-        category: 'labs',
-        sourceTitle: 'Metabolic Lab Panel',
-        sourceDate: 'Last Lab Review',
-        significance: 'positive',
-      },
-      {
-        id: 'wc-3',
-        statement: 'Adverse dry cough resolved completely following Perindopril discontinuation and substitution with Telmisartan 40 mg.',
-        category: 'meds',
-        sourceTitle: 'Medication Event',
-        sourceDate: 'Previous Encounter',
-        significance: 'positive',
-      },
-    ],
-    whatMatters: [
-      {
-        id: 'wm-1',
-        statement: 'Documented sensitivity: Penicillin-class cross-reactivity risk. Beta-lactam prescribing contraindication active.',
-        category: 'meds',
-        sourceTitle: 'Allergies & Sensitivities',
-        sourceDate: 'Documented Record',
-        significance: 'warning',
-      },
-      {
-        id: 'wm-2',
-        statement: 'Serum Potassium stable at 4.3 mmol/L; routine renal and electrolyte monitoring recommended with ARB therapy.',
-        category: 'labs',
-        sourceTitle: 'Renal Function Panel',
-        sourceDate: 'Last Lab Review',
-        significance: 'neutral',
-      },
-      {
-        id: 'wm-3',
-        statement: 'Longitudinal target goal met: Blood Pressure maintains within normative interval (< 130/80 mmHg).',
-        category: 'vitals',
-        sourceTitle: 'Care Plan Target',
-        sourceDate: 'Active Care Plan',
-        significance: 'positive',
-      },
-    ],
-    sinceLastVisit: [
-      {
-        id: 'slv-1',
-        statement: '6 patient-reported home blood pressure observations logged via Patient App (average reading 121/80 mmHg).',
-        category: 'adherence',
-        sourceTitle: 'Patient Observation Stream',
-        sourceDate: 'Last 14 days',
-        significance: 'positive',
-      },
-      {
-        id: 'slv-2',
-        statement: 'Daily care plan checklist adherence: 100% of morning antihypertensive doses confirmed taken.',
-        category: 'adherence',
-        sourceTitle: 'My Care Checklist',
-        sourceDate: 'This week',
-        significance: 'positive',
-      },
-      {
-        id: 'slv-3',
-        statement: 'Zero acute respiratory symptoms or peripheral edema episodes recorded in home logs.',
-        category: 'vitals',
-        sourceTitle: 'Symptom Journal',
-        sourceDate: 'Recent Logs',
-        significance: 'positive',
-      },
-    ],
-  };
+  // Dynamic unique AI Cards generated from patient records (Deterministic baseline)
+  const generatedCards = React.useMemo(() => {
+    return generatePatientAICards({
+      patient,
+      medications,
+      labs,
+      visits,
+      careEvents,
+    });
+  }, [patient, medications, labs, visits, careEvents]);
+
+  // Dynamic analysis content derived from real patient records (Deterministic baseline)
+  const analyticsData: Record<QuestionKey, AnalyticsItem[]> = React.useMemo(() => {
+    return generatePatientQuestionAnalytics({
+      patient,
+      medications,
+      labs,
+      visits,
+      careEvents,
+    });
+  }, [patient, medications, labs, visits, careEvents]);
+
+  const cardsToRender = customCards || generatedCards;
+  const questionsToRender = customQuestions || analyticsData;
+
+  const filteredCards = activeCardCategory === 'all'
+    ? cardsToRender
+    : cardsToRender.filter((c) => c.category === activeCardCategory);
 
   const handleRegenerate = async () => {
     setIsRegenerating(true);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    setGeneratedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    setIsRegenerating(false);
+    try {
+      const res = await generatePatientAIAnalyticsAction(patient.id);
+      if (res.success && res.data) {
+        setCustomCards(res.data.cards);
+        setCustomQuestions(res.data.questions);
+        setGeneratedAt(res.data.provenance.generatedAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        setProvenanceNote(res.data.provenance.notes || null);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        setGeneratedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setGeneratedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   const handleSaveToNote = async () => {
     setIsSaving(true);
     try {
       const currentItems = analyticsData[selectedQuestion];
-      const summaryText = `[AI Clinical Analytics Summary - ${selectedQuestion === 'whatChanged' ? 'What Changed' : selectedQuestion === 'whatMatters' ? 'What Matters' : 'Since Last Visit'}]\n` +
+      const defaultSummary = `[AI Clinical Analytics Summary - ${selectedQuestion === 'whatChanged' ? 'What Changed' : selectedQuestion === 'whatMatters' ? 'What Matters' : 'Since Last Visit'}]\n` +
         currentItems.map((item, idx) => `${idx + 1}. ${item.statement} (Source: ${item.sourceTitle})`).join('\n');
+      const textToSave = pendingSaveText || defaultSummary;
 
       if (onSaveToNote) {
-        await onSaveToNote(summaryText);
+        await onSaveToNote(textToSave);
       }
       setIsConfirmSaveOpen(false);
+      setPendingSaveText(null);
       setSaveSuccessMsg('AI summary saved into clinical visit notes with your physician provenance.');
       setTimeout(() => setSaveSuccessMsg(null), 5000);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveCardToNote = (card: GeneratedAICard) => {
+    const text = `[AI Clinical Card: ${card.title}]\n` +
+      `Category: ${card.category.toUpperCase()} | Status: ${card.statusBadge.label}\n` +
+      (card.keyMetric ? `Key Metric: ${card.keyMetric.label}: ${card.keyMetric.value} ${card.keyMetric.unit || ''} (${card.keyMetric.delta || ''})\n` : '') +
+      `Clinical Insights:\n` +
+      card.insights.map((ins, i) => `  ${i + 1}. ${ins.statement} (Source: ${ins.sourceTitle})`).join('\n') +
+      `\nRecommended Action: ${card.clinicalAction}`;
+
+    setPendingSaveText(text);
+    setIsConfirmSaveOpen(true);
   };
 
   return (
@@ -203,6 +192,11 @@ export function AIAnalyticsTabView({
               <span className="text-[10px] font-mono text-[var(--color-ink-muted)] bg-black/5 px-2 py-0.5 rounded-full">
                 {dict.aiGeneratedLabel} · {generatedAt}
               </span>
+              {provenanceNote && (
+                <span className="text-[10px] font-mono text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                  {provenanceNote}
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-[var(--color-ink-muted)]">
               {dict.subtitle}
@@ -272,7 +266,8 @@ export function AIAnalyticsTabView({
       {/* 3. CLINICAL STATEMENTS & SOURCE CHIPS                                      */}
       {/* ========================================================================= */}
       {hasClinicalData ? (
-        <ModuleCard
+        <>
+          <ModuleCard
           title={
             selectedQuestion === 'whatChanged'
               ? dict.whatChanged
@@ -284,7 +279,7 @@ export function AIAnalyticsTabView({
           data-testid="ai-analytics-card"
         >
           <div className="flex flex-col gap-3 pt-1">
-            {analyticsData[selectedQuestion].map((item) => (
+            {(questionsToRender[selectedQuestion] || []).map((item) => (
               <div
                 key={item.id}
                 className="p-3.5 sm:p-4 rounded-2xl bg-[var(--color-surface)] border border-black/5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:border-black/10 transition-all"
@@ -332,6 +327,199 @@ export function AIAnalyticsTabView({
             ))}
           </div>
         </ModuleCard>
+
+        {/* ========================================================================= */}
+        {/* 3B. AI CLINICAL CARDS GENERATOR STUDIO                                     */}
+        {/* ========================================================================= */}
+        <div className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[var(--color-ink)]" />
+              <h3 className="text-xs font-bold text-[var(--color-ink)] uppercase tracking-wider">
+                AI Clinical Cards Studio
+              </h3>
+              <span className="text-[10px] font-mono text-[var(--color-ink-muted)] bg-black/5 px-2 py-0.5 rounded-full">
+                {cardsToRender.length} Cards Synthesized
+              </span>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'all', label: 'All Cards' },
+                { id: 'synthesis', label: 'Holistic Trajectory' },
+                { id: 'cardiovascular', label: 'Cardiovascular' },
+                { id: 'metabolic', label: 'Metabolic' },
+                { id: 'pharmacotherapy', label: 'Pharmacotherapy' },
+                { id: 'risk', label: '10-Yr Risk' },
+                { id: 'telemetry', label: 'Home Telemetry' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveCardCategory(cat.id)}
+                  className={clsx(
+                    'px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer',
+                    activeCardCategory === cat.id
+                      ? 'bg-[var(--color-ink)] text-white shadow-xs'
+                      : 'bg-white/80 hover:bg-white text-[var(--color-ink-muted)] border border-black/10'
+                  )}
+                  data-testid={`card-filter-${cat.id}`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {filteredCards.map((card) => {
+              const IconComponent =
+                card.category === 'synthesis'
+                  ? Sparkles
+                  : card.category === 'cardiovascular'
+                  ? Heart
+                  : card.category === 'metabolic'
+                  ? Zap
+                  : card.category === 'pharmacotherapy'
+                  ? Pill
+                  : card.category === 'risk'
+                  ? Gauge
+                  : Activity;
+
+              return (
+                <div
+                  key={card.id}
+                  className={clsx(
+                    'p-4 rounded-2xl bg-white shadow-xs flex flex-col justify-between gap-3 hover:border-black/20 transition-all',
+                    card.category === 'synthesis'
+                      ? 'md:col-span-2 border border-[var(--color-ink)]/20 shadow-sm ring-1 ring-[var(--color-accent-neon)]/30'
+                      : 'border border-black/10'
+                  )}
+                  data-testid={`ai-generated-card-${card.id}`}
+                >
+                  {/* Card Header */}
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-xl bg-[var(--color-surface)] flex items-center justify-center text-[var(--color-ink)] shadow-2xs">
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold text-[var(--color-ink)] leading-tight">
+                            {card.title}
+                          </h4>
+                          <span className="text-[10px] text-[var(--color-ink-muted)] block line-clamp-1">
+                            {card.subtitle}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={clsx(
+                          'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0',
+                          card.statusBadge.variant === 'positive'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : card.statusBadge.variant === 'warning'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : card.statusBadge.variant === 'critical'
+                            ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                            : 'bg-stone-100 text-stone-800 border border-stone-200'
+                        )}
+                      >
+                        {card.statusBadge.label}
+                      </span>
+                    </div>
+
+                    {/* Key Metric Hero */}
+                    {card.keyMetric && (
+                      <div className="mt-3 p-3 rounded-xl bg-[var(--color-surface)] border border-black/5 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-bold text-[var(--color-ink-muted)] uppercase tracking-wider block">
+                            {card.keyMetric.label}
+                          </span>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className="text-base sm:text-lg font-mono font-bold text-[var(--color-ink)]">
+                              {card.keyMetric.value}
+                            </span>
+                            {card.keyMetric.unit && (
+                              <span className="text-xs text-[var(--color-ink-muted)] font-mono">
+                                {card.keyMetric.unit}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {card.keyMetric.delta && (
+                          <div
+                            className={clsx(
+                              'px-2.5 py-1 rounded-full text-[11px] font-mono font-bold flex items-center gap-1 shadow-2xs',
+                              card.keyMetric.deltaPositive
+                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-900 border border-amber-300'
+                            )}
+                          >
+                            {card.keyMetric.deltaDirection === 'down' ? (
+                              <TrendingDown className="w-3.5 h-3.5" />
+                            ) : card.keyMetric.deltaDirection === 'up' ? (
+                              <TrendingUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            )}
+                            <span>{card.keyMetric.delta}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Insights List */}
+                    <div className="flex flex-col gap-2 mt-3">
+                      {card.insights.map((ins) => (
+                        <div key={ins.id} className="flex items-start gap-2 text-xs text-[var(--color-ink)]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ink-muted)] shrink-0 mt-1.5" />
+                          <div className="flex-1">
+                            <p className="leading-relaxed">{ins.statement}</p>
+                            <span className="text-[10px] font-mono text-[var(--color-ink-muted)] mt-0.5 block">
+                              Source: {ins.sourceTitle} · {ins.sourceDate}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Clinical Action */}
+                    <div className="mt-3 p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-[11px] text-[var(--color-ink)] flex items-start gap-2">
+                      <Stethoscope className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-amber-950 block">Suggested Clinical Follow-up:</span>
+                        <p className="text-[var(--color-ink-muted)] mt-0.5 leading-tight">{card.clinicalAction}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Footer Action */}
+                  <div className="pt-2 border-t border-black/5 flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-[var(--color-ink-muted)]">
+                      Evidence-Grounded AI
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveCardToNote(card)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--color-surface)] hover:bg-[var(--color-accent-neon)] text-[var(--color-ink)] text-xs font-semibold border border-black/10 transition-all cursor-pointer shadow-2xs"
+                      title="Save this AI card synthesis into visit notes"
+                      data-testid={`save-card-button-${card.id}`}
+                    >
+                      <FilePlus className="w-3.5 h-3.5" />
+                      <span>Save Card to Note</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        </>
       ) : (
         /* Baseline Empty State (e.g. Nour El-Sayed p-007) */
         <div className="bg-[var(--color-surface-subtle)] rounded-2xl p-8 border border-white/60 shadow-xs flex flex-col items-center justify-center text-center gap-2">
@@ -352,7 +540,10 @@ export function AIAnalyticsTabView({
       {/* ========================================================================= */}
       <OverlaySheet
         isOpen={isConfirmSaveOpen}
-        onClose={() => setIsConfirmSaveOpen(false)}
+        onClose={() => {
+          setIsConfirmSaveOpen(false);
+          setPendingSaveText(null);
+        }}
         title={dict.saveConfirmTitle}
       >
         <div className="flex flex-col gap-4 text-left">
@@ -361,19 +552,28 @@ export function AIAnalyticsTabView({
             <p>{dict.saveConfirmDesc}</p>
           </div>
 
-          <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs font-mono text-[var(--color-ink-muted)]">
+          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-mono text-[var(--color-ink-muted)]">
             <span className="font-bold block mb-1 text-[var(--color-ink)]">Summary Content to Record:</span>
-            {analyticsData[selectedQuestion].map((item, idx) => (
-              <div key={item.id} className="mt-1">
-                • {item.statement}
-              </div>
-            ))}
+            {pendingSaveText ? (
+              <pre className="whitespace-pre-wrap font-sans text-xs text-[var(--color-ink)] leading-relaxed">
+                {pendingSaveText}
+              </pre>
+            ) : (
+              analyticsData[selectedQuestion].map((item, idx) => (
+                <div key={item.id} className="mt-1">
+                  • {item.statement}
+                </div>
+              ))
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/5 mt-1">
             <button
               type="button"
-              onClick={() => setIsConfirmSaveOpen(false)}
+              onClick={() => {
+                setIsConfirmSaveOpen(false);
+                setPendingSaveText(null);
+              }}
               className="px-4 py-2 rounded-full text-xs font-semibold text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] cursor-pointer"
             >
               {dict.cancel}

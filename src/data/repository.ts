@@ -124,7 +124,16 @@ export async function getPatients(
             eventsByPatient[ev.patient_id].push(ev);
           }
           for (const p of patients) {
-            const pEvents = eventsByPatient[p.id] || [];
+            let pEvents = eventsByPatient[p.id] || [];
+            if (pEvents.length === 0) {
+              const localEvents = (readStore().careEvents || []).filter((e: CareEvent) => e.patientId === p.id);
+              if (localEvents.length > 0) {
+                pEvents = localEvents.map((e: CareEvent) => ({
+                  kind: e.kind,
+                  occurred_at: e.occurredAt,
+                }));
+              }
+            }
             p.recordChips = pEvents.slice(0, 4).map((e) => ({
               kind: e.kind,
               date: formatChipDate(e.occurred_at),
@@ -132,9 +141,15 @@ export async function getPatients(
             p.extraChipCount = Math.max(0, pEvents.length - 4);
           }
         } catch {
+          const store = readStore();
+          const allEvents = store.careEvents || [];
           for (const p of patients) {
-            p.recordChips = [];
-            p.extraChipCount = 0;
+            const pEvents = allEvents.filter((e: CareEvent) => e.patientId === p.id);
+            p.recordChips = pEvents.slice(0, 4).map((e: CareEvent) => ({
+              kind: e.kind,
+              date: formatChipDate(e.occurredAt),
+            }));
+            p.extraChipCount = Math.max(0, pEvents.length - 4);
           }
         }
       }

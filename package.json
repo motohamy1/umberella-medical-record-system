@@ -12,10 +12,12 @@
     "test": "node --max-old-space-size=4096 ./node_modules/vitest/vitest.mjs run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "db:migrate": "node scripts/migrate.mjs",
     "db:reset": "node scripts/db-reset.mjs",
     "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
+    "@google/genai": "^2.31.0",
     "@neondatabase/serverless": "^1.2.0",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",

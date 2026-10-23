@@ -45,6 +45,7 @@ import {
   type PatientObservationInput,
 } from './repository';
 import { processPrescriptionOCR, type PrescriptionScanResult, type ExtractedPrescriptionItem } from './ocrService';
+import { generateEnsembleAIAnalytics, type EnsembleAIAnalyticsResult } from './aiEnsembleEngine';
 import { generateSignedMediaUrl } from '@/lib/signedAccess';
 import { readStore, writeStore } from './db';
 import { CreatePatientSchema } from './schemas';
@@ -987,6 +988,52 @@ export async function generateDSARAction(patientId: string): Promise<ActionState
     return { success: false, error: err instanceof Error ? err.message : 'Failed to generate DSAR report' };
   }
 }
+
+/**
+ * Generate Neurosymbolic AI Clinical Intelligence across multi-model ensemble (Gemini, OpenRouter, Groq, Heuristic).
+ * Governed by: docs/PACK.md §6.5 & Rule 12 (§9.4).
+ */
+export async function generatePatientAIAnalyticsAction(
+  patientId: string
+): Promise<ActionState<EnsembleAIAnalyticsResult>> {
+  try {
+    const patient = await getPatientById(patientId);
+    if (!patient) {
+      return { success: false, error: 'Patient not found' };
+    }
+
+    const [visits, vitals, medications, labs, imaging, genetics, allergies, careEvents] = await Promise.all([
+      getPatientVisits(patientId),
+      getPatientVitals(patientId),
+      getPatientMedications(patientId),
+      getPatientLabs(patientId),
+      getPatientImaging(patientId),
+      getPatientGenetics(patientId),
+      getPatientAllergies(patientId),
+      getPatientCareEvents(patientId),
+    ]);
+
+    const result = await generateEnsembleAIAnalytics({
+      patient,
+      visits,
+      vitals,
+      medications,
+      labs,
+      imaging,
+      genetics,
+      allergies,
+      careEvents,
+    });
+
+    return { success: true, data: result };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'AI Analytics generation failed',
+    };
+  }
+}
+
 
 
 
