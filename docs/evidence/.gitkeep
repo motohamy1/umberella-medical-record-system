@@ -1,0 +1,2 @@
+# Evidence artifacts directory
+Playwright screenshots and deviation logs for each slice are saved here under docs/evidence/<issue>/.

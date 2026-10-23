@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity, MessageSquare, FileCode, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity, MessageSquare, FileCode, ShieldCheck, Sparkles, Pill } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { InteractiveTimeline } from '@/components/timeline/InteractiveTimeline';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
@@ -31,6 +31,7 @@ import { AllergiesTabView } from './AllergiesTabView';
 import { GeneticsTabView } from './GeneticsTabView';
 import { AIAnalyticsTabView } from './AIAnalyticsTabView';
 import { PatientContextBar } from './PatientContextBar';
+import { generatePatientAICards } from '@/data/patientAIGenerator';
 
 interface PaperPatientWorkspaceProps {
   patient: Patient;
@@ -190,6 +191,30 @@ export function PaperPatientWorkspace({
   const { day: recordDay, month: recordMonth } = parseRecordDayMonth(
     patient.lastVisitDate || careEvents[0]?.occurredAt
   );
+
+  // Compute rich AI Summary Response across patient history, past & present conditions, meds, labs & telemetry
+  const { aiSummaryText, aiRegimenPills } = React.useMemo(() => {
+    const cards = generatePatientAICards({
+      patient,
+      medications,
+      labs,
+      visits,
+      careEvents,
+      allergies,
+      genetics,
+      imaging,
+      vitals,
+    });
+    const synthesis = cards.find((c) => c.category === 'synthesis');
+    return {
+      aiSummaryText:
+        synthesis?.caseSummary ||
+        `${patient.name} is a ${patient.age}-year-old ${patient.sex.toLowerCase()} evaluated for ${
+          patient.primaryConcern || 'chronic care management'
+        }. Over ${visits?.length || 0} recorded clinical encounters, active pharmacotherapy and structured lifestyle interventions have achieved clinical stabilization with favorable multi-system biomarker trends.`,
+      aiRegimenPills: synthesis?.regimenPills || [],
+    };
+  }, [patient, medications, labs, visits, careEvents, allergies, genetics, imaging, vitals]);
 
   // Close modal on Escape key
   useEffect(() => {
@@ -376,35 +401,35 @@ export function PaperPatientWorkspace({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-[var(--color-ink-muted)] px-2.5 py-1 rounded-full bg-white/50">
+            <span className="hidden md:inline text-xs font-medium text-[var(--color-ink-muted)] px-2.5 py-1 rounded-full bg-white/50">
               Workspace Mode: Clinical View
             </span>
             <button
               type="button"
               onClick={() => setIsCommunicationOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
               data-testid="message-patient-button"
             >
               <MessageSquare className="w-3.5 h-3.5 stroke-[2.2] text-[var(--color-ink)]" />
-              <span>Message Patient</span>
+              <span className="hidden sm:inline">Message Patient</span>
             </button>
             <button
               type="button"
               onClick={() => setIsFHIROpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
               data-testid="fhir-interop-btn"
             >
               <FileCode className="w-3.5 h-3.5 stroke-[2.2] text-[var(--color-ink)]" />
-              <span>FHIR R4</span>
+              <span className="hidden sm:inline">FHIR R4</span>
             </button>
             <button
               type="button"
               onClick={() => setIsComplianceOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-full bg-white hover:bg-stone-50 border border-black/10 text-[var(--color-ink)] text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
               data-testid="compliance-modal-btn"
             >
               <ShieldCheck className="w-3.5 h-3.5 stroke-[2.2] text-emerald-700" />
-              <span>Compliance</span>
+              <span className="hidden sm:inline">Compliance</span>
             </button>
             <button
               type="button"
@@ -533,8 +558,8 @@ export function PaperPatientWorkspace({
           {/* Perspective System Modules, Diagnosis & Vital Signs (Right Column) */}
           <div className="lg:col-span-8 xl:col-span-9 flex flex-col justify-between gap-2.5 sm:gap-3 h-full">
 
-            {/* 1. Body System Perspective Stepladder Tabs (Unbounded, free animation, no internal scroll frame) */}
-            <div className="flex items-start gap-1.5 sm:gap-2.5 overflow-visible py-1">
+            {/* 1. Body System Perspective Stepladder Tabs (scrollable horizontally in mobile layout, single row) */}
+            <div className="flex flex-nowrap items-start gap-1.5 sm:gap-2.5 overflow-x-auto max-w-full py-1 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {stepladderTabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -700,7 +725,7 @@ export function PaperPatientWorkspace({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                    className="bg-[var(--color-surface-subtle)] rounded-[22px] p-3.5 sm:p-4 border border-white/60 shadow-xs flex flex-col justify-between gap-2 h-full min-h-[140px]"
+                    className="bg-[var(--color-surface-subtle)] rounded-[22px] p-3.5 sm:p-4 border border-white/60 shadow-xs flex flex-col justify-between gap-2.5 h-full min-h-[140px]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -711,9 +736,14 @@ export function PaperPatientWorkspace({
                           <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[var(--color-accent-neon)] text-[var(--color-ink)]">
                             {activeTab}
                           </span>
+                          {activeTab === 'AI Analysis' && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              Executive AI Case Summary
+                            </span>
+                          )}
                         </div>
                         <h3 className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-snug mt-0.5">
-                          {activeTab === 'AI Analysis' && 'Longitudinal Trend & Trajectory Inference'}
+                          {activeTab === 'AI Analysis' && `AI Clinical Case Summary · ${patient.name}`}
                           {activeTab === 'Visits' && 'Clinical Encounters & Specialty Consultations'}
                           {activeTab === 'Labs' && 'Biochemical Markers & Longitudinal Lab Trends'}
                           {activeTab === 'Imaging' && 'Diagnostic Scans, PACS & Modality Records'}
@@ -722,47 +752,147 @@ export function PaperPatientWorkspace({
                         </h3>
                       </div>
                       <span className="px-2 py-0.5 rounded-md bg-[var(--color-white)] text-[9.5px] font-mono font-semibold text-[var(--color-ink-muted)] border border-black/5 shrink-0">
-                        Perspective Filtered
+                        {activeTab === 'AI Analysis' ? 'Rule 12 Grounded' : 'Perspective Filtered'}
                       </span>
                     </div>
 
-                    <div className="text-[11px] text-[var(--color-ink-muted)] leading-relaxed">
-                      {activeTab === 'AI Analysis' && 'AI telemetry synthesis indicates stable post-concussive recovery with reducing headache frequency. Medication adherence verified.'}
-                      {activeTab === 'Visits' && `Chronological visit records on file for ${patient.name}. ${careEvents.filter(e => e.kind === 'visit').length || 4} clinical encounters logged with attending physician.`}
-                      {activeTab === 'Labs' && `Longitudinal panels reflect normative fasting glycemia (${latestGlucose} mg/dL) and consistent electrolyte balance across all clinic milestone tests.`}
-                      {activeTab === 'Imaging' && 'Diagnostic scan modality records archived. Thoracic cross sections and neuroimaging reviewed without acute compromise.'}
-                      {activeTab === 'Genetics' && 'Targeted pharmacogenomic profile shows standard CYP2C19 and CYP2D6 metabolizer status. No contraindications flagged.'}
-                      {activeTab === 'Allergies' && (
-                        allergies.length > 0 ? (
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {allergies.map((alg) => (
+                    {activeTab === 'AI Analysis' ? (
+                      <div className="flex flex-col gap-2.5">
+                        {/* Executive AI Clinical Narrative Summary */}
+                        <div className="p-3.5 rounded-xl bg-white/80 border border-black/5 shadow-2xs flex flex-col gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-[var(--color-ink)]" />
+                            <span className="text-[10px] font-bold text-[var(--color-ink)] uppercase tracking-wider">
+                              AI Executive Case Synthesis · Full Patient History & Dashboard Integration
+                            </span>
+                          </div>
+                          <p className="text-xs sm:text-[12px] text-[var(--color-ink)] leading-relaxed font-normal">
+                            {aiSummaryText}
+                          </p>
+
+                          {/* Distinct Active Pharmacotherapy Regimen Pills */}
+                          {aiRegimenPills && aiRegimenPills.length > 0 && (
+                            <div className="pt-2 border-t border-black/5 flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-bold text-[var(--color-ink-muted)] uppercase tracking-wider flex items-center gap-1 mr-1">
+                                <Pill className="w-3 h-3 text-[var(--color-ink)]" />
+                                Active Regimen:
+                              </span>
+                              {aiRegimenPills.map((med) => (
                                 <span
-                                  key={alg.id}
-                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-[10.5px] font-semibold text-rose-800"
+                                  key={med.id || med.name}
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white border border-black/10 shadow-2xs text-[10.5px] font-medium text-[var(--color-ink)]"
                                 >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                                  <span>{alg.substance}:</span>
-                                  <span className="font-normal">{alg.reaction} ({alg.severity})</span>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span className="font-semibold">{med.name}</span>
+                                  {med.strength && (
+                                    <span className="text-[9.5px] text-[var(--color-ink-muted)] font-mono">
+                                      {med.strength}
+                                    </span>
+                                  )}
                                 </span>
                               ))}
                             </div>
-                            <p className="text-[11px] text-[var(--color-ink-muted)] leading-relaxed mt-0.5">
-                              Active allergy reconciliation confirmed by attending clinician. Cross-reactivity alerts enabled across clinical order entry.
+                          )}
+                        </div>
+
+                        {/* Key Clinical Metric Badges (Patient Personalized) */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {patient.id === 'p-008' ? (
+                            <>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Metabolic: HbA1c 6.4% · Amaryl Deprescribed</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Hemodynamics: 122/80 mmHg · 98% Telemetry Adherence</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-[10px] font-semibold text-rose-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                <span>Safety Alert: Sulfonamides & NSAIDs Contraindicated</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-900">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span>Bone Density: Osteopenia T-score -1.8 · Vit D 34 ng/mL</span>
+                              </span>
+                            </>
+                          ) : patient.id === 'p-001' ? (
+                            <>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Hemodynamics: 125/83 mmHg · Controlled on Dual Therapy</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Glycemic Control: Fasting 111 mg/dL · T2D Monitored</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-[10px] font-semibold text-rose-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                <span>Critical Allergy Alert: Codeine (Bronchospasm Risk)</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Adherence: 100% Prescription Telemetry Adherence</span>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Trajectory: Controlled on Guideline Care</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Vitals: Normative Baseline</span>
+                              </span>
+                              {criticalAllergyItem && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-[10px] font-semibold text-rose-800">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                  <span>Allergy Alert: {criticalAllergyItem.substance} ({criticalAllergyItem.reaction})</span>
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-[var(--color-ink-muted)] leading-relaxed">
+                        {activeTab === 'Visits' && `Chronological visit records on file for ${patient.name}. ${careEvents.filter(e => e.kind === 'visit').length || 4} clinical encounters logged with attending physician.`}
+                        {activeTab === 'Labs' && `Longitudinal panels reflect normative fasting glycemia (${latestGlucose} mg/dL) and consistent electrolyte balance across all clinic milestone tests.`}
+                        {activeTab === 'Imaging' && 'Diagnostic scan modality records archived. Thoracic cross sections and neuroimaging reviewed without acute compromise.'}
+                        {activeTab === 'Genetics' && 'Targeted pharmacogenomic profile shows standard CYP2C19 and CYP2D6 metabolizer status. No contraindications flagged.'}
+                        {activeTab === 'Allergies' && (
+                          allergies.length > 0 ? (
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {allergies.map((alg) => (
+                                  <span
+                                    key={alg.id}
+                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-[10.5px] font-semibold text-rose-800"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                    <span>{alg.substance}:</span>
+                                    <span className="font-normal">{alg.reaction} ({alg.severity})</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <p className="text-[11px] text-[var(--color-ink-muted)] leading-relaxed mt-0.5">
+                                Active allergy reconciliation confirmed by attending clinician. Cross-reactivity alerts enabled across clinical order entry.
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-[var(--color-ink-muted)] leading-relaxed">
+                              No Known Drug Allergies (NKDA) or severe environmental adverse reactions documented. Annual allergy reconciliation completed by clinical intake team.
                             </p>
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-[var(--color-ink-muted)] leading-relaxed">
-                            No Known Drug Allergies (NKDA) or severe environmental adverse reactions documented. Annual allergy reconciliation completed by clinical intake team.
-                          </p>
-                        )
-                      )}
-                    </div>
+                          )
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-[var(--color-border-grid)] text-[10.5px]">
                       <div className="flex items-center gap-1.5 text-[var(--color-ink)] font-medium">
                         <span className="text-[var(--color-ink-muted)]">Active Scope:</span>
-                        <span>{activeTab} Domain Telemetry</span>
+                        <span>{activeTab === 'AI Analysis' ? 'Comprehensive AI Patient Dossier Synthesis' : `${activeTab} Domain Telemetry`}</span>
                       </div>
                       <button
                         type="button"
@@ -885,6 +1015,8 @@ export function PaperPatientWorkspace({
               careEvents={careEvents}
               allergies={allergies}
               vitals={vitals}
+              imaging={imaging}
+              genetics={genetics}
               onShowOnTimeline={() => {
                 setActiveTab('Overview');
               }}
@@ -940,7 +1072,7 @@ export function PaperPatientWorkspace({
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-stretch">
           
           {/* 1. Vital Signs History Card (~50% width) */}
-          <div className="lg:col-span-6 bg-[var(--color-surface-subtle)] rounded-[24px] p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-white/60 relative min-h-[170px] overflow-hidden">
+          <div className="lg:col-span-6 bg-[var(--color-surface-subtle)] rounded-[24px] p-4 sm:p-5 flex flex-col justify-between shadow-sm border border-white/60 relative min-h-[170px] overflow-hidden">
             
             {/* Top Scoop Notch Header */}
             <div className="flex items-center justify-between relative z-10">
@@ -1000,7 +1132,7 @@ export function PaperPatientWorkspace({
           </div>
 
           {/* 2. Records Card (~25% width) */}
-          <div className="lg:col-span-3 bg-[var(--color-surface-subtle)] rounded-[24px] p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-white/60 relative min-h-[170px] overflow-hidden">
+          <div className="lg:col-span-3 bg-[var(--color-surface-subtle)] rounded-[24px] p-4 sm:p-5 flex flex-col justify-between shadow-sm border border-white/60 relative min-h-[170px] overflow-hidden">
             
             {/* Top Scoop Notch Header */}
             <div className="flex items-center justify-between relative z-10">
@@ -1022,12 +1154,12 @@ export function PaperPatientWorkspace({
             </div>
 
             {/* Date + Soft Coral Record Capsule */}
-            <div className="flex items-center gap-3 mt-4">
-              <div className="text-center shrink-0 pr-1">
+            <div className="flex items-center gap-2.5 sm:gap-3 mt-4 w-full min-w-0">
+              <div className="text-center shrink-0 pr-0.5">
                 <span className="text-2xl sm:text-3xl font-bold text-[var(--color-ink)] leading-none block">
                   {recordDay}
                 </span>
-                <span className="text-[11px] font-medium text-[var(--color-ink-muted)] uppercase block mt-0.5">
+                <span className="text-[10px] sm:text-[11px] font-medium text-[var(--color-ink-muted)] uppercase block mt-0.5">
                   {recordMonth}
                 </span>
               </div>
@@ -1035,16 +1167,17 @@ export function PaperPatientWorkspace({
               {/* Coral Capsule Card */}
               <div
                 onClick={() => setIsRecordsOpen(true)}
-                className="flex-1 p-2.5 rounded-[18px] bg-[var(--color-status-critical)] flex items-center gap-2.5 shadow-xs border border-white/40 cursor-pointer hover:opacity-95 transition-all"
+                title={careEvents[0]?.label || 'Office visit'}
+                className="flex-1 min-w-0 px-2.5 py-2 sm:py-2.5 rounded-[18px] bg-[var(--color-status-critical)] flex items-center gap-2 sm:gap-2.5 shadow-xs border border-white/40 cursor-pointer hover:opacity-95 transition-all overflow-hidden"
               >
-                <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center shrink-0 shadow-2xs">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white flex items-center justify-center shrink-0 shadow-2xs">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 stroke-[var(--color-ink)]" fill="none" strokeWidth="1.6" strokeLinecap="round">
                     <path d="M6 2h4a1 1 0 011 1v1H5V3a1 1 0 011-1z" />
                     <rect x="3" y="4" width="10" height="10" rx="1.5" />
                     <line x1="6" y1="7.5" x2="10" y2="7.5" />
                   </svg>
                 </div>
-                <span className="text-xs sm:text-sm font-semibold text-[var(--color-ink)] truncate">
+                <span className="text-xs sm:text-[13px] font-semibold text-[var(--color-ink)] truncate min-w-0 block">
                   {careEvents[0]?.label || 'Office visit'}
                 </span>
               </div>
@@ -1052,7 +1185,7 @@ export function PaperPatientWorkspace({
           </div>
 
           {/* 3. Labs Card (~25% width) */}
-          <div className="lg:col-span-3 bg-[var(--color-surface-subtle)] rounded-[24px] p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-white/60 relative min-h-[170px] overflow-hidden">
+          <div className="lg:col-span-3 bg-[var(--color-surface-subtle)] rounded-[24px] p-4 sm:p-5 flex flex-col justify-between shadow-sm border border-white/60 relative min-h-[170px] overflow-hidden">
             
             {/* Top Scoop Notch Header */}
             <div className="flex items-center justify-between relative z-10">

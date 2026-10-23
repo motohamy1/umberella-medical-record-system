@@ -46,6 +46,28 @@ function formatChipDate(dateStr: string): string {
 }
 
 /**
+ * Defensive date to ISO string converter for database row columns.
+ * Prevents PostgreSQL TIMESTAMP Date objects from causing React child rendering errors.
+ */
+function toISO(val: unknown): string {
+  if (!val) return '';
+  if (val instanceof Date) return val.toISOString();
+  return String(val);
+}
+
+function toISOOrNull(val: unknown): string | null {
+  if (!val) return null;
+  if (val instanceof Date) return val.toISOString();
+  return String(val);
+}
+
+function toISOOrUndefined(val: unknown): string | undefined {
+  if (!val) return undefined;
+  if (val instanceof Date) return val.toISOString();
+  return String(val);
+}
+
+/**
  * Retrieve patient directory with search & status filters, with folder chips populated from care_events.
  */
 export async function getPatients(
@@ -105,9 +127,9 @@ export async function getPatients(
         primaryConcern: r.primary_concern,
         socialHistory: r.social_history,
         carePlan: r.care_plan,
-        lastVisitDate: r.last_visit_date,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
+        lastVisitDate: toISO(r.last_visit_date),
+        createdAt: toISO(r.created_at),
+        updatedAt: toISO(r.updated_at),
       }));
 
       // Populate care event chips in a single batch query
@@ -234,9 +256,9 @@ export async function getPatientById(id: string): Promise<Patient | null> {
           primaryConcern: r.primary_concern,
           socialHistory: r.social_history,
           carePlan: r.care_plan,
-          lastVisitDate: r.last_visit_date,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
+          lastVisitDate: toISO(r.last_visit_date),
+          createdAt: toISO(r.created_at),
+          updatedAt: toISO(r.updated_at),
         };
       }
     } catch (err) {
@@ -511,11 +533,11 @@ export async function getClinicAppointments(): Promise<Appointment[]> {
           orgId: r.org_id,
           patientId: r.patient_id,
           patientName: r.patient_name,
-          scheduledTime: r.scheduled_time,
+          scheduledTime: toISO(r.scheduled_time),
           visitType: r.visit_type,
           status: r.status,
-          actualStart: r.actual_start,
-          actualEnd: r.actual_end,
+          actualStart: toISOOrNull(r.actual_start),
+          actualEnd: toISOOrNull(r.actual_end),
         }));
       }
     } catch (err) {
@@ -599,7 +621,7 @@ export async function getPatientAllergies(patientId: string): Promise<Allergy[]>
           status: r.status,
           source: r.source,
           createdBy: r.created_by,
-          createdAt: r.created_at,
+          createdAt: toISO(r.created_at),
         }));
       }
     } catch (err) {
@@ -629,9 +651,9 @@ export async function getPatientLabs(patientId: string): Promise<LabResult[]> {
           referenceLow: r.reference_low,
           referenceHigh: r.reference_high,
           status: r.status,
-          occurredAt: r.occurred_at,
+          occurredAt: toISO(r.occurred_at),
           reviewedBy: r.reviewed_by,
-          reviewedAt: r.reviewed_at,
+          reviewedAt: toISOOrUndefined(r.reviewed_at),
           source: r.source,
           createdBy: r.created_by,
         }));
@@ -714,13 +736,13 @@ export async function getPatientMedications(patientId: string): Promise<Medicati
           route: r.route,
           instructions: r.instructions,
           status: r.status,
-          startDate: r.start_date,
-          endDate: r.end_date,
+          startDate: toISO(r.start_date),
+          endDate: toISOOrNull(r.end_date),
           source: r.source,
           createdBy: r.created_by,
-          createdAt: r.created_at,
+          createdAt: toISO(r.created_at),
           verifiedBy: r.verified_by,
-          verifiedAt: r.verified_at,
+          verifiedAt: toISOOrNull(r.verified_at),
         }));
       }
     } catch (err) {
@@ -747,10 +769,10 @@ export async function getPatientMedicationEvents(patientId: string): Promise<Med
           medicationId: r.medication_id,
           eventType: r.event_type,
           detail: r.detail,
-          occurredAt: r.occurred_at,
+          occurredAt: toISO(r.occurred_at),
           source: r.source,
           createdBy: r.created_by,
-          createdAt: r.created_at,
+          createdAt: toISO(r.created_at),
         }));
       }
     } catch (err) {
@@ -971,14 +993,14 @@ export async function getPatientVisits(patientId: string): Promise<Visit[]> {
           notes: r.notes,
           status: r.status,
           stage: r.stage || 'after',
-          occurredAt: r.occurred_at,
+          occurredAt: toISO(r.occurred_at),
           source: r.source,
           createdBy: r.created_by,
-          createdAt: r.created_at,
+          createdAt: toISO(r.created_at),
           updatedBy: r.updated_by,
-          updatedAt: r.updated_at,
+          updatedAt: toISO(r.updated_at),
           verifiedBy: r.verified_by,
-          verifiedAt: r.verified_at,
+          verifiedAt: toISOOrNull(r.verified_at),
           aiGenerated: r.ai_generated,
         }));
       }
@@ -1013,14 +1035,14 @@ export async function getVisitById(visitId: string): Promise<Visit | null> {
           notes: r.notes,
           status: r.status,
           stage: r.stage || 'after',
-          occurredAt: r.occurred_at,
+          occurredAt: toISO(r.occurred_at),
           source: r.source,
           createdBy: r.created_by,
-          createdAt: r.created_at,
+          createdAt: toISO(r.created_at),
           updatedBy: r.updated_by,
-          updatedAt: r.updated_at,
+          updatedAt: toISO(r.updated_at),
           verifiedBy: r.verified_by,
-          verifiedAt: r.verified_at,
+          verifiedAt: toISOOrNull(r.verified_at),
           aiGenerated: r.ai_generated,
         };
       }
@@ -1049,7 +1071,7 @@ export async function getVisitVitals(visitId: string): Promise<VitalObservation[
           metric: r.metric,
           value: r.value,
           unit: r.unit,
-          measuredAt: r.measured_at,
+          measuredAt: toISO(r.measured_at),
           source: r.source,
           createdBy: r.created_by,
           verifiedBy: r.verified_by,
@@ -1254,9 +1276,9 @@ export async function markLabReviewed(
           referenceLow: r.reference_low,
           referenceHigh: r.reference_high,
           status: r.status,
-          occurredAt: r.occurred_at,
+          occurredAt: toISO(r.occurred_at),
           reviewedBy: r.reviewed_by,
-          reviewedAt: r.reviewed_at,
+          reviewedAt: toISOOrUndefined(r.reviewed_at),
           source: r.source,
           createdBy: r.created_by,
         };
@@ -1390,7 +1412,11 @@ export async function getPatientImaging(patientId: string): Promise<ImagingStudy
         [patientId]
       );
       if (res && res.rows && res.rows.length > 0) {
-        return res.rows;
+        return res.rows.map((r: any) => ({
+          ...r,
+          occurredAt: toISO(r.occurredAt),
+          createdAt: toISO(r.createdAt),
+        }));
       }
     } catch (err) {
       console.warn('Neon getPatientImaging failed, fallback to store:', err);
@@ -1662,7 +1688,11 @@ export async function getPatientGenetics(patientId: string): Promise<GeneticFind
         [patientId]
       );
       if (res && res.rows && res.rows.length > 0) {
-        return res.rows;
+        return res.rows.map((r: any) => ({
+          ...r,
+          occurredAt: toISO(r.occurredAt),
+          createdAt: toISO(r.createdAt),
+        }));
       }
     } catch (err) {
       console.warn('Neon getPatientGenetics failed, fallback to store:', err);

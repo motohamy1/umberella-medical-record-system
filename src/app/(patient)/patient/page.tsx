@@ -18,16 +18,18 @@
  * - Zero raw hex colors.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppFrame } from '@/components/primitives/AppFrame';
 import { NotchHeader } from '@/components/primitives/NotchHeader';
 import { CircleButton } from '@/components/primitives/CircleButton';
+import { AnchoredPopover } from '@/components/overlays/AnchoredPopover';
 import { NextUpCard } from '@/components/patient/home/NextUpCard';
 import { HealthSnapshotCard } from '@/components/patient/home/HealthSnapshotCard';
 import { QuickLogCard } from '@/components/patient/home/QuickLogCard';
 import { MyCarePlanCard } from '@/components/patient/home/MyCarePlanCard';
 import { getDictionary, type Locale } from '@/i18n';
+import { authClient } from '@/lib/auth/client';
 import { Bell, LogOut, User, Globe, ChevronDown, Check } from 'lucide-react';
 import {
   fetchPatientHomeDataAction,
@@ -46,6 +48,7 @@ export default function PatientHomePage() {
   const [patientId, setPatientId] = useState<string>('p-001');
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Home data state
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -92,7 +95,8 @@ export default function PatientHomePage() {
     setLocale((prev) => (prev === 'en' ? 'ar' : 'en'));
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await authClient.signOut();
     router.push('/login');
   };
 
@@ -127,7 +131,7 @@ export default function PatientHomePage() {
               />
 
               {/* Patient Profile Dropdown trigger */}
-              <div className="relative">
+              <div className="relative" ref={profileMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsProfileMenuOpen((prev) => !prev)}
@@ -144,8 +148,15 @@ export default function PatientHomePage() {
                 </button>
 
                 {/* Profile Dropdown Menu */}
-                {isProfileMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-[var(--color-white)] border border-black/10 shadow-lg p-2 z-50 flex flex-col gap-1 text-left">
+                <AnchoredPopover
+                  open={isProfileMenuOpen}
+                  onClose={() => setIsProfileMenuOpen(false)}
+                  anchorRef={profileMenuRef}
+                  align="end"
+                  offset={8}
+                  ariaLabel={patientName}
+                  className="w-56 rounded-2xl bg-[var(--color-white)] border border-black/10 shadow-lg p-2 flex flex-col gap-1 text-left"
+                >
                     <div className="px-3 py-2 border-b border-black/5">
                       <span className="text-[10px] font-medium text-[var(--color-ink-muted)] uppercase tracking-wider block">
                         Signed in as Patient
@@ -216,8 +227,7 @@ export default function PatientHomePage() {
                         <span>Sign out</span>
                       </button>
                     </div>
-                  </div>
-                )}
+                  </AnchoredPopover>
               </div>
             </div>
           }

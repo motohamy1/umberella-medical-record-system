@@ -41,13 +41,20 @@ yarn-error.log*
 next-env.d.ts
 
 # generated tokens & tests
-src/styles/tokens.generated.*
+# (keep the generator + generated tokens committed so Vercel builds work)
+!/src/styles/tokens.generated.*
 /test-results/
 /playwright-report/
 
 #agents
 docs
-scripts
+!docs/
+!docs/design/
+!docs/design/tokens.json
+scripts/
+!scripts/
+scripts/*
+!scripts/generate-tokens.mjs
 tests
 AGENTS.md
 CONTEXT.md

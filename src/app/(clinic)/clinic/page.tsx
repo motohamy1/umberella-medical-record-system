@@ -22,7 +22,9 @@ import { LoadingSkeleton } from '@/components/state/LoadingSkeleton';
 import { PatientFolderCard } from '@/components/cards/PatientFolderCard';
 import { AddPatientSheet } from '@/components/forms/AddPatientSheet';
 import { SyncStatusBadge } from '@/components/sync/SyncStatusBadge';
+import { AnchoredPopover } from '@/components/overlays/AnchoredPopover';
 import { getDictionary, type Locale } from '@/i18n';
+import { authClient } from '@/lib/auth/client';
 import {
   Bell,
   Search,
@@ -77,19 +79,6 @@ export default function ClinicHomePage() {
 
   // Selected appointment notes modal state
   const [activeNotesAppointment, setActiveNotesAppointment] = useState<Appointment | null>(null);
-
-  // Close doctor menu on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (doctorMenuRef.current && !doctorMenuRef.current.contains(event.target as Node)) {
-        setIsDoctorMenuOpen(false);
-      }
-    }
-    if (isDoctorMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isDoctorMenuOpen]);
 
   // Initial load or filter/search change
   const loadData = useCallback(async () => {
@@ -149,7 +138,8 @@ export default function ClinicHomePage() {
     setIsDoctorMenuOpen(false);
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await authClient.signOut();
     router.push('/login');
   };
 
@@ -167,7 +157,7 @@ export default function ClinicHomePage() {
   );
 
   return (
-    <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="w-full h-screen overflow-hidden flex flex-col">
+    <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="w-full h-[100dvh] overflow-hidden flex flex-col">
       <AppFrame>
         {/* ── NOTCH HEADER (ref-1 shell & ref-3 controls) ── */}
         <NotchHeader
@@ -175,14 +165,14 @@ export default function ClinicHomePage() {
           controls={
             <div className="flex items-center gap-2 sm:gap-3">
               {/* Search pill */}
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-[var(--radius-pill)] bg-[var(--color-white)] text-[var(--color-ink)] text-xs shadow-2xs border border-[var(--color-ink-soft)]/20 focus-within:ring-2 focus-within:ring-[var(--color-accent)] transition-all">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-pill)] bg-[var(--color-white)] text-[var(--color-ink)] text-xs shadow-2xs border border-[var(--color-ink-soft)]/20 focus-within:ring-2 focus-within:ring-[var(--color-accent)] transition-all min-w-0">
                 <Search className="w-3.5 h-3.5 text-[var(--color-ink-muted)] shrink-0" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={dict.common.searchPlaceholder}
-                  className="bg-transparent border-none outline-none text-xs w-28 sm:w-48 text-[var(--color-ink)] placeholder:text-[var(--color-ink-muted)]"
+                  className="bg-transparent border-none outline-none text-xs w-16 min-w-0 sm:w-44 text-[var(--color-ink)] placeholder:text-[var(--color-ink-muted)]"
                   aria-label={dict.common.searchPlaceholder}
                 />
               </div>
@@ -191,11 +181,11 @@ export default function ClinicHomePage() {
               <button
                 type="button"
                 onClick={() => setIsAddPatientOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-[var(--radius-pill)] bg-[var(--color-accent)] text-[var(--color-ink)] font-bold text-xs shadow-2xs hover:opacity-95 active:scale-95 transition-all select-none cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 rounded-[var(--radius-pill)] bg-[var(--color-accent)] text-[var(--color-ink)] font-bold text-xs shadow-2xs hover:opacity-95 active:scale-95 transition-all select-none cursor-pointer"
                 aria-label={dict.common.addPatient}
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>{dict.common.addPatient}</span>
+                <span className="hidden sm:inline">{dict.common.addPatient}</span>
               </button>
 
               {/* Offline & Cloud Sync Center Badge (§572) */}
@@ -227,11 +217,15 @@ export default function ClinicHomePage() {
                   <ChevronDown className={`w-3 h-3 text-[var(--color-ink-muted)] transition-transform ${isDoctorMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {isDoctorMenuOpen && (
-                  <div
-                    className="absolute end-0 top-9 w-48 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 shadow-lg py-1.5 z-50 text-xs"
-                    role="menu"
-                  >
+                <AnchoredPopover
+                  open={isDoctorMenuOpen}
+                  onClose={() => setIsDoctorMenuOpen(false)}
+                  anchorRef={doctorMenuRef}
+                  align="end"
+                  offset={6}
+                  ariaLabel={dict.doctorMenu.doctorName}
+                  className="w-48 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 shadow-lg py-1.5 text-xs"
+                >
                     <div className="px-3 py-1.5 border-b border-[var(--color-ink-soft)]/20 sm:hidden">
                       <span className="font-bold text-[var(--color-ink)] block">{dict.doctorMenu.doctorName}</span>
                       <span className="text-[10px] text-[var(--color-ink-muted)]">{dict.roles.doctor}</span>
@@ -295,8 +289,7 @@ export default function ClinicHomePage() {
                       <LogOut className="w-3.5 h-3.5" />
                       <span>{dict.doctorMenu.signOut}</span>
                     </button>
-                  </div>
-                )}
+                </AnchoredPopover>
               </div>
             </div>
           }

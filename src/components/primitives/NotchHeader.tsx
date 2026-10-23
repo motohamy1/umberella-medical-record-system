@@ -29,11 +29,12 @@ export function NotchHeader({
   return (
     <header
       className={clsx(
-        'relative w-full bg-[var(--color-canvas)] text-[var(--color-ink)] min-h-[58px] flex items-center justify-between px-4 sm:px-8 z-20 border-b border-[var(--color-ink-soft)]/20',
+        'relative w-full bg-[var(--color-canvas)] text-[var(--color-ink)] min-h-[58px] z-40 border-b border-[var(--color-ink-soft)]/20',
+        'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3.5 sm:px-8 py-1.5',
         className
       )}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 shrink-0">
         {onClose && (
           <CircleButton
             size="sm"
@@ -48,8 +49,8 @@ export function NotchHeader({
         </h1>
       </div>
 
-      {/* Controls on the header */}
-      <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none">
+      {/* Controls on the header — wrap onto their own row when they don't fit */}
+      <div className="flex flex-wrap justify-end items-center gap-2 py-1">
         {controls}
       </div>
     </header>

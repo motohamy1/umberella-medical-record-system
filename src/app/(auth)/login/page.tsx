@@ -8,31 +8,40 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { AppFrame } from '@/components/primitives/AppFrame';
 import { NotchHeader } from '@/components/primitives/NotchHeader';
 import { ModuleCard } from '@/components/cards/ModuleCard';
 import { getDictionary, type Locale } from '@/i18n';
+import { signInAction } from './actions';
+import { authClient } from '@/lib/auth/client';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [locale, setLocale] = useState<Locale>('en');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const dict = getDictionary(locale);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleGoogle = async () => {
+    await authClient.signIn.social({ provider: 'google', callbackURL: window.location.origin });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please fill in both email and password.');
       return;
     }
-    // S0 Mock Authentication - routes to provider or patient
-    if (email.includes('patient')) {
-      router.push('/patient');
-    } else {
-      router.push('/clinic');
+    setIsSubmitting(true);
+    setError('');
+    const formData = new FormData();
+    formData.set('email', email);
+    formData.set('password', password);
+    const result = await signInAction(formData);
+    if (result?.error) {
+      setError(result.error);
+      setIsSubmitting(false);
     }
   };
 
@@ -113,11 +122,22 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-[var(--radius-pill)] bg-[var(--color-accent)] text-[var(--color-ink)] font-bold text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all mt-2"
+                disabled={isSubmitting}
+                className="w-full py-2.5 rounded-[var(--radius-pill)] bg-[var(--color-accent)] text-[var(--color-ink)] font-bold text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all mt-2 disabled:opacity-60"
               >
-                {dict.auth.submit}
+                {isSubmitting ? 'Signing in…' : dict.auth.submit}
               </button>
             </form>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleGoogle}
+                className="w-full py-2.5 rounded-[var(--radius-pill)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/40 text-[var(--color-ink)] font-semibold text-sm hover:bg-[var(--color-white)] transition-all"
+              >
+                Continue with Google
+              </button>
+            </div>
 
             <div className="mt-6 pt-4 border-t border-[var(--color-ink-soft)]/20 text-center text-xs text-[var(--color-ink-muted)]">
               <span>Need an account? </span>

@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 import { ModuleCard } from '@/components/cards/ModuleCard';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
-import type { Patient, CareEvent, Medication, LabResult, Visit } from '@/data/types';
+import type { Patient, CareEvent, Medication, LabResult, Visit, Allergy, ImagingStudy, GeneticFinding } from '@/data/types';
 import {
   generatePatientAICards,
   generatePatientQuestionAnalytics,
@@ -55,8 +55,10 @@ interface AIAnalyticsTabViewProps {
   labs?: LabResult[];
   visits?: Visit[];
   careEvents?: CareEvent[];
-  allergies?: unknown[];
+  allergies?: Allergy[];
   vitals?: unknown[];
+  imaging?: ImagingStudy[];
+  genetics?: GeneticFinding[];
   onShowOnTimeline?: (dateStr?: string) => void;
   onSaveToNote?: (summaryText: string) => Promise<void>;
   dict?: typeof en.aiAnalytics;
@@ -65,6 +67,14 @@ interface AIAnalyticsTabViewProps {
 
 type QuestionKey = 'whatChanged' | 'whatMatters' | 'sinceLastVisit';
 
+function formatSourceDate(val: unknown): string {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return val.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return String(val);
+}
+
 
 export function AIAnalyticsTabView({
   patient,
@@ -72,6 +82,10 @@ export function AIAnalyticsTabView({
   labs = [],
   visits = [],
   careEvents = [],
+  allergies = [],
+  vitals = [],
+  imaging = [],
+  genetics = [],
   onShowOnTimeline,
   onSaveToNote,
   dict = en.aiAnalytics,
@@ -100,8 +114,12 @@ export function AIAnalyticsTabView({
       labs,
       visits,
       careEvents,
+      allergies,
+      genetics,
+      imaging,
+      vitals,
     });
-  }, [patient, medications, labs, visits, careEvents]);
+  }, [patient, medications, labs, visits, careEvents, allergies, genetics, imaging, vitals]);
 
   // Dynamic analysis content derived from real patient records (Deterministic baseline)
   const analyticsData: Record<QuestionKey, AnalyticsItem[]> = React.useMemo(() => {
@@ -165,6 +183,7 @@ export function AIAnalyticsTabView({
   const handleSaveCardToNote = (card: GeneratedAICard) => {
     const text = `[AI Clinical Card: ${card.title}]\n` +
       `Category: ${card.category.toUpperCase()} | Status: ${card.statusBadge.label}\n` +
+      (card.caseSummary ? `Case Summary Narrative: ${card.caseSummary}\n` : '') +
       (card.keyMetric ? `Key Metric: ${card.keyMetric.label}: ${card.keyMetric.value} ${card.keyMetric.unit || ''} (${card.keyMetric.delta || ''})\n` : '') +
       `Clinical Insights:\n` +
       card.insights.map((ins, i) => `  ${i + 1}. ${ins.statement} (Source: ${ins.sourceTitle})`).join('\n') +
@@ -347,7 +366,7 @@ export function AIAnalyticsTabView({
             <div className="flex flex-wrap items-center gap-1.5">
               {[
                 { id: 'all', label: 'All Cards' },
-                { id: 'synthesis', label: 'Holistic Trajectory' },
+                { id: 'synthesis', label: 'Case Summary' },
                 { id: 'cardiovascular', label: 'Cardiovascular' },
                 { id: 'metabolic', label: 'Metabolic' },
                 { id: 'pharmacotherapy', label: 'Pharmacotherapy' },
@@ -432,6 +451,62 @@ export function AIAnalyticsTabView({
                       </span>
                     </div>
 
+                    {/* Dedicated Executive Case Summary Narrative - Modern Clinical Format */}
+                    {card.caseSummary && (
+                      <div className="mt-3.5 p-4 rounded-2xl bg-gradient-to-br from-emerald-500/[0.06] via-teal-500/[0.03] to-[var(--color-surface-subtle)] border border-emerald-500/20 shadow-xs flex flex-col gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/15 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-emerald-600/10 flex items-center justify-center text-emerald-900 shadow-2xs">
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-bold text-emerald-950 uppercase tracking-wider block">
+                                AI Clinical Case Summary
+                              </span>
+                              <span className="text-[10px] text-emerald-800/80 font-medium block">
+                                Longitudinal Multi-System Inference · Rule 12 Grounded
+                              </span>
+                            </div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-md bg-white/80 border border-emerald-500/20 text-[10px] font-mono font-semibold text-emerald-900 shadow-2xs">
+                            {patient.age} yrs · {patient.sex} · {visits.length} Encounters
+                          </span>
+                        </div>
+
+                        <p className="text-xs sm:text-[13px] text-[var(--color-ink)] leading-relaxed font-normal">
+                          {card.caseSummary}
+                        </p>
+
+                        {/* Distinct Active Pharmacotherapy Regimen Pills */}
+                        {card.regimenPills && card.regimenPills.length > 0 && (
+                          <div className="pt-2 border-t border-emerald-500/15">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <Pill className="w-3.5 h-3.5 text-emerald-800" />
+                              <span className="text-[10px] font-bold text-emerald-950 uppercase tracking-wider">
+                                Active Pharmacotherapy Regimen ({card.regimenPills.length} Distinct Agents)
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {card.regimenPills.map((med) => (
+                                <span
+                                  key={med.id || med.name}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-emerald-600/20 shadow-2xs text-[11px] font-medium text-[var(--color-ink)] hover:border-emerald-600/40 transition-all"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span className="font-semibold text-emerald-950">{med.name}</span>
+                                  {med.strength && (
+                                    <span className="text-[10px] text-[var(--color-ink-muted)] font-mono">
+                                      {med.strength}
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Key Metric Hero */}
                     {card.keyMetric && (
                       <div className="mt-3 p-3 rounded-xl bg-[var(--color-surface)] border border-black/5 flex items-center justify-between">
@@ -481,7 +556,7 @@ export function AIAnalyticsTabView({
                           <div className="flex-1">
                             <p className="leading-relaxed">{ins.statement}</p>
                             <span className="text-[10px] font-mono text-[var(--color-ink-muted)] mt-0.5 block">
-                              Source: {ins.sourceTitle} · {ins.sourceDate}
+                              Source: {String(ins.sourceTitle)} · {formatSourceDate(ins.sourceDate)}
                             </span>
                           </div>
                         </div>

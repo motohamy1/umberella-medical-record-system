@@ -75,7 +75,7 @@ export function SyncStatusBadge({
           )}
         />
         {showText && (
-          <span className="text-[11px] truncate max-w-[160px] sm:max-w-[200px]">
+          <span className="text-[11px] truncate max-w-[160px] sm:max-w-[200px] hidden sm:inline">
             {summary.statusLabelEn}
           </span>
         )}

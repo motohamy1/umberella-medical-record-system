@@ -122,6 +122,7 @@ export function PatientFolderCard({
       onClick={handleCardClick}
       className={clsx(
         'group relative flex flex-col cursor-pointer select-none transition-all duration-200 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ink)]',
+        isMenuOpen && 'z-30',
         className
       )}
       role="button"
@@ -152,12 +153,12 @@ export function PatientFolderCard({
       </svg>
 
       {/* ── MRN Printed on Top-Left Back Tab (Mirrors in RTL) ── */}
-      <div className="absolute top-1 start-2.5 sm:start-3 z-10 font-mono text-[8px] sm:text-[8.5px] font-bold text-[var(--color-ink)] tracking-tight whitespace-nowrap">
+      <div className="absolute top-1 start-2.5 sm:start-3 z-[1] font-mono text-[8px] sm:text-[8.5px] font-bold text-[var(--color-ink)] tracking-tight whitespace-nowrap">
         {patient.mrn}
       </div>
 
       {/* ── LAYER 2: FRONT POCKET CARD IN GRAY (ref-5 front pocket & clinical data) ── */}
-      <div className="relative mt-6 bg-[var(--color-surface)] rounded-[var(--radius-card)] p-3.5 sm:p-4 shadow-xs border border-[var(--color-ink-soft)]/30 flex flex-col justify-between z-20 min-h-[168px] transition-all duration-200 group-hover:shadow-md">
+      <div className="relative mt-6 bg-[var(--color-surface)] rounded-[var(--radius-card)] p-3.5 sm:p-4 shadow-xs border border-[var(--color-ink-soft)]/30 flex flex-col justify-between z-[2] min-h-[168px] transition-all duration-200 group-hover:shadow-md">
         <div>
           {/* Row 1: Avatar, Full Patient Name, and Kebab Menu */}
           <div className="flex items-center justify-between gap-1.5">
