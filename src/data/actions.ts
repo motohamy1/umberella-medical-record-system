@@ -2,6 +2,7 @@
 
 import {
   createPatient,
+  deletePatient,
   getPatients,
   getPatientById,
   getClinicStats,
@@ -136,6 +137,17 @@ export async function createPatientAction(
     };
   }
 }
+
+export async function deletePatientAction(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await deletePatient(id);
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to delete patient';
+    return { success: false, error: message };
+  }
+}
+
 
 export async function fetchPatientsAction(
   filter?: string,

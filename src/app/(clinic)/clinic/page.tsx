@@ -40,11 +40,14 @@ import {
   ShieldCheck,
   Languages,
   LogOut,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import {
   fetchPatientsAction,
   fetchClinicStatsAction,
   fetchClinicAppointmentsAction,
+  deletePatientAction,
 } from '@/data/actions';
 import type { Patient, ClinicStats, Appointment } from '@/data/types';
 
@@ -76,6 +79,25 @@ export default function ClinicHomePage() {
   // Doctor profile menu state
   const [isDoctorMenuOpen, setIsDoctorMenuOpen] = useState(false);
   const doctorMenuRef = useRef<HTMLDivElement>(null);
+
+  // Interactive Onboarding Walkthrough Guide Banner state
+  const [showGuideBanner, setShowGuideBanner] = useState(true);
+
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem('umbrella_guide_dismissed');
+      if (dismissed === 'true') {
+        setShowGuideBanner(false);
+      }
+    } catch {}
+  }, []);
+
+  const handleDismissGuide = () => {
+    setShowGuideBanner(false);
+    try {
+      localStorage.setItem('umbrella_guide_dismissed', 'true');
+    } catch {}
+  };
 
   // Selected appointment notes modal state
   const [activeNotesAppointment, setActiveNotesAppointment] = useState<Appointment | null>(null);
@@ -149,6 +171,23 @@ export default function ClinicHomePage() {
       ...prev,
       totalPatients: prev.totalPatients + 1,
     }));
+  };
+
+  const handleDeletePatient = async (patientId: string) => {
+    try {
+      const res = await deletePatientAction(patientId);
+      if (res.success) {
+        setPatients((prev) => prev.filter((p) => p.id !== patientId));
+        setStats((prev) => ({
+          ...prev,
+          totalPatients: Math.max(0, prev.totalPatients - 1),
+        }));
+      } else {
+        alert(res.error || 'Failed to delete patient');
+      }
+    } catch (err) {
+      console.error('Failed to delete patient:', err);
+    }
   };
 
   // Patients requiring attention (§8.5 attention rules)
@@ -377,6 +416,75 @@ export default function ClinicHomePage() {
                   </span>
                 }
               >
+                {/* ── Welcome & Interactive Walkthrough Guide Banner ── */}
+                {showGuideBanner && (
+                  <div className="mb-4 p-4 sm:p-4.5 rounded-[var(--radius-card)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/35 shadow-xs relative overflow-hidden transition-all">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[var(--color-accent-lemon)] flex items-center justify-center text-[var(--color-ink)] shadow-2xs shrink-0">
+                          <Sparkles className="w-4 h-4 text-[var(--color-ink)]" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-[var(--color-ink)]">
+                              Welcome to ClinicUmberella
+                            </h3>
+                            <span className="px-2 py-0.5 rounded-full bg-[var(--color-ink)] text-white text-[9px] font-bold uppercase tracking-wider">
+                              Getting Started
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--color-ink-muted)] mt-0.5">
+                            Clean workspace initialized. Here is how to navigate and manage your clinic:
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDismissGuide}
+                        className="p-1 rounded-full text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-white)] transition-colors cursor-pointer"
+                        title="Dismiss guide"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 pt-3 border-t border-[var(--color-ink-soft)]/20 text-xs">
+                      <div className="p-2.5 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/20 flex flex-col justify-between">
+                        <div>
+                          <span className="font-bold text-[11px] text-[var(--color-ink)] block">
+                            1. Explore UI Walkthrough
+                          </span>
+                          <span className="text-[10px] text-[var(--color-ink-muted)] leading-tight block mt-1">
+                            Click the sample folder below to inspect vital charts, stepladder tabs, AI summary, and DICOM MRI viewer.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/20 flex flex-col justify-between">
+                        <div>
+                          <span className="font-bold text-[11px] text-[var(--color-ink)] block">
+                            2. Add Real Patients
+                          </span>
+                          <span className="text-[10px] text-[var(--color-ink-muted)] leading-tight block mt-1">
+                            Use the <strong className="font-bold text-[var(--color-ink)]">+ Add patient</strong> button in the top header anytime to register your first patient.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/20 flex flex-col justify-between">
+                        <div>
+                          <span className="font-bold text-[11px] text-[var(--color-ink)] block">
+                            3. Remove Sample Folder
+                          </span>
+                          <span className="text-[10px] text-[var(--color-ink-muted)] leading-tight block mt-1">
+                            Click the (•••) menu on the sample card or inside the record to remove the walkthrough patient whenever ready.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* ── 4 Filter Pills (PACK.md §6.2: Recent, Today, Needs attention, Critical) ── */}
                 <div className="flex items-center gap-2 overflow-x-auto py-1 mb-4 scrollbar-none" role="tablist">
                   {[
@@ -441,6 +549,7 @@ export default function ClinicHomePage() {
                           patient={p}
                           locale={locale}
                           onOpenWorkspace={(id) => router.push(`/clinic/patients/${id}`)}
+                          onDeletePatient={handleDeletePatient}
                         />
                       ))}
                     </div>

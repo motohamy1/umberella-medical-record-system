@@ -2,13 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity, MessageSquare, FileCode, ShieldCheck, Sparkles, Pill } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity, MessageSquare, FileCode, ShieldCheck, Sparkles, Pill, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { InteractiveTimeline } from '@/components/timeline/InteractiveTimeline';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
 import { CommunicationModal } from '@/components/communication/CommunicationModal';
 import { FHIRInteroperabilityModal } from '@/components/fhir/FHIRInteroperabilityModal';
 import { ComplianceCenterModal } from '@/components/compliance/ComplianceCenterModal';
+import { deletePatientAction } from '@/data/actions';
 import type {
   Patient,
   CareEvent,
@@ -175,6 +177,28 @@ export function PaperPatientWorkspace({
   const [isCommunicationOpen, setIsCommunicationOpen] = useState(false);
   const [isFHIROpen, setIsFHIROpen] = useState(false);
   const [isComplianceOpen, setIsComplianceOpen] = useState(false);
+  const router = useRouter();
+  const [isDeletingGuide, setIsDeletingGuide] = useState(false);
+
+  const handleRemoveGuidePatient = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to remove this sample guide folder? Your patient list will be completely clean.'
+    );
+    if (!confirmed) return;
+    try {
+      setIsDeletingGuide(true);
+      const res = await deletePatientAction(patient.id);
+      if (res.success) {
+        router.push('/clinic');
+      } else {
+        alert(res.error || 'Failed to remove sample folder');
+      }
+    } catch (err) {
+      console.error('Failed to remove sample patient:', err);
+    } finally {
+      setIsDeletingGuide(false);
+    }
+  };
 
   // Derive latest clinical vitals dynamically from patient record
   const sortedVitals = [...vitals].sort(
@@ -441,6 +465,43 @@ export function PaperPatientWorkspace({
             </button>
           </div>
         </header>
+
+        {/* ========================================================================= */}
+        {/* INTERACTIVE GUIDE WALKTHROUGH BANNER (For Sample Patient)                 */}
+        {/* ========================================================================= */}
+        {patient.id === 'p-guide-001' && (
+          <div className="w-full bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/40 rounded-[20px] p-4 sm:p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--color-accent-lemon)] flex items-center justify-center shrink-0 text-[var(--color-ink)] shadow-2xs">
+                <Sparkles className="w-5 h-5 text-[var(--color-ink)]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full bg-[var(--color-ink)] text-white text-[10px] font-bold tracking-wider uppercase">
+                    Interactive Walkthrough
+                  </span>
+                  <h3 className="font-bold text-sm sm:text-base text-[var(--color-ink)]">
+                    Explore Paper Chart Workspace & Clinical Modules
+                  </h3>
+                </div>
+                <p className="text-xs text-[var(--color-ink-muted)] mt-1 max-w-2xl leading-relaxed">
+                  This is a sample wireframe patient folder demonstrating vital trend charts, stepladder clinical tabs, AI clinical synthesis, visits, labs, and DICOM imaging inspection. You can test adding records or remove this sample folder whenever you are ready.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end">
+              <button
+                type="button"
+                onClick={handleRemoveGuidePatient}
+                disabled={isDeletingGuide}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-all shadow-2xs active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingGuide ? 'Removing...' : 'Remove Sample Folder'}</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* PATIENT SUMMARY & SYSTEM MODULES (TOP SECTION)                            */}

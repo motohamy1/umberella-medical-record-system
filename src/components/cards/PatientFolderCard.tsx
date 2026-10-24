@@ -17,9 +17,10 @@ import {
   ArrowUpRight,
   Send,
   Check,
+  Trash2,
 } from 'lucide-react';
 import type { Patient, PatientStatus } from '@/data/types';
-import { sendPatientInviteAction } from '@/data/actions';
+import { sendPatientInviteAction, deletePatientAction } from '@/data/actions';
 import { getDictionary, type Locale } from '@/i18n';
 
 export interface PatientFolderCardProps {
@@ -27,6 +28,7 @@ export interface PatientFolderCardProps {
   className?: string;
   locale?: Locale;
   onOpenWorkspace?: (patientId: string) => void;
+  onDeletePatient?: (patientId: string) => void | Promise<void>;
 }
 
 export function PatientFolderCard({
@@ -34,11 +36,13 @@ export function PatientFolderCard({
   className,
   locale = 'en',
   onOpenWorkspace,
+  onDeletePatient,
 }: PatientFolderCardProps) {
   const router = useRouter();
   const dict = getDictionary(locale);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [inviteSent, setInviteSent] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -117,6 +121,32 @@ export function PatientFolderCard({
     return name.slice(0, 2).toUpperCase();
   };
 
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsMenuOpen(false);
+    const isGuide = patient.id === 'p-guide-001';
+    const confirmed = window.confirm(
+      isGuide
+        ? 'Are you sure you want to remove this sample guide folder?'
+        : `Are you sure you want to delete patient record for ${patient.name}?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      if (onDeletePatient) {
+        await onDeletePatient(patient.id);
+      } else {
+        await deletePatientAction(patient.id);
+        router.refresh();
+      }
+    } catch (err) {
+      console.error('Failed to delete patient:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div
       onClick={handleCardClick}
@@ -153,8 +183,13 @@ export function PatientFolderCard({
       </svg>
 
       {/* ── MRN Printed on Top-Left Back Tab (Mirrors in RTL) ── */}
-      <div className="absolute top-1 start-2.5 sm:start-3 z-[1] font-mono text-[8px] sm:text-[8.5px] font-bold text-[var(--color-ink)] tracking-tight whitespace-nowrap">
-        {patient.mrn}
+      <div className="absolute top-1 start-2.5 sm:start-3 z-[1] flex items-center gap-1.5 font-mono text-[8px] sm:text-[8.5px] font-bold text-[var(--color-ink)] tracking-tight whitespace-nowrap">
+        <span>{patient.mrn}</span>
+        {patient.id === 'p-guide-001' && (
+          <span className="px-1.5 py-0.5 rounded-full bg-[var(--color-accent-lemon)] text-[var(--color-ink)] text-[7.5px] font-sans font-extrabold uppercase tracking-wide border border-black/10">
+            Guide
+          </span>
+        )}
       </div>
 
       {/* ── LAYER 2: FRONT POCKET CARD IN GRAY (ref-5 front pocket & clinical data) ── */}
@@ -192,7 +227,7 @@ export function PatientFolderCard({
               {/* Dropdown Menu */}
               {isMenuOpen && (
                 <div
-                  className="absolute end-0 top-7 w-44 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 shadow-lg py-1.5 z-50 text-xs"
+                  className="absolute end-0 top-7 w-48 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 shadow-lg py-1.5 z-50 text-xs"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -202,7 +237,7 @@ export function PatientFolderCard({
                       setIsMenuOpen(false);
                       router.push(`/clinic/patients/${patient.id}`);
                     }}
-                    className="w-full px-3 py-1.5 text-start font-medium text-[var(--color-ink)] hover:bg-[var(--color-surface)] flex items-center gap-2"
+                    className="w-full px-3 py-1.5 text-start font-medium text-[var(--color-ink)] hover:bg-[var(--color-surface)] flex items-center gap-2 cursor-pointer"
                   >
                     <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-ink-muted)]" />
                     <span>{dict.folder.openWorkspace}</span>
@@ -213,7 +248,7 @@ export function PatientFolderCard({
                       type="button"
                       onClick={handleSendInvite}
                       disabled={inviteSent}
-                      className="w-full px-3 py-1.5 text-start font-medium text-[var(--color-ink)] hover:bg-[var(--color-surface)] flex items-center gap-2"
+                      className="w-full px-3 py-1.5 text-start font-medium text-[var(--color-ink)] hover:bg-[var(--color-surface)] flex items-center gap-2 cursor-pointer"
                     >
                       {inviteSent ? (
                         <>
@@ -228,6 +263,24 @@ export function PatientFolderCard({
                       )}
                     </button>
                   )}
+
+                  <div className="my-1 border-t border-[var(--color-ink-soft)]/20" />
+
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="w-full px-3 py-1.5 text-start font-medium text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>
+                      {isDeleting
+                        ? 'Removing...'
+                        : patient.id === 'p-guide-001'
+                        ? 'Remove Sample Guide'
+                        : 'Delete Patient'}
+                    </span>
+                  </button>
                 </div>
               )}
             </div>

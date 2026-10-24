@@ -438,6 +438,28 @@ export async function createPatient(input: CreatePatientInput): Promise<Patient>
   return newPatient;
 }
 
+/**
+ * Soft-delete a patient and remove them from the active clinic directory.
+ */
+export async function deletePatient(id: string): Promise<boolean> {
+  const sql = getDb();
+  if (sql) {
+    try {
+      await (sql as any).query(`UPDATE patients SET deleted_at = NOW() WHERE id = $1`, [id]);
+    } catch (err) {
+      console.warn('Neon delete patient failed, fallback to store:', err);
+    }
+  }
+
+  const store = readStore();
+  if (store.patients) {
+    store.patients = store.patients.filter((p: Patient) => p.id !== id);
+    writeStore(store);
+  }
+
+  return true;
+}
+
 export async function getPatientCareEvents(patientId: string): Promise<CareEvent[]> {
   const store = readStore();
   return (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
