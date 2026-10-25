@@ -67,6 +67,15 @@ interface PaperPatientWorkspaceProps {
   }) => Promise<void>;
   onChangeMedicationDose?: (medId: string, newStrength: string, dosesPerDay: number, reason: string) => Promise<void>;
   onUpdateMedicationStatus?: (medId: string, status: MedicationStatus, reason?: string) => Promise<void>;
+  onUpdateMedication?: (medId: string, data: {
+    name?: string;
+    tradeName?: string;
+    strength?: string;
+    dosesPerDay?: number;
+    route?: string;
+    instructions?: string;
+    startDate?: string;
+  }) => Promise<void>;
   onRecordVisit?: (newVisit: {
     title: string;
     visitType: string;
@@ -76,6 +85,12 @@ interface PaperPatientWorkspaceProps {
   }) => Promise<void>;
   onUpdateVisitStage?: (visitId: string, stage: VisitStage, notes?: string) => Promise<void>;
   onUpdateVisitNotes?: (visitId: string, data: { notes?: string; plan?: string; followUpDate?: string }) => Promise<void>;
+  onRecordVital?: (vital: {
+    metric: string;
+    value: string;
+    unit: string;
+    measuredAt?: string;
+  }) => Promise<void>;
   onRecordLab?: (newLab: {
     testName: string;
     value: string;
@@ -147,9 +162,11 @@ export function PaperPatientWorkspace({
   onStartMedication,
   onChangeMedicationDose,
   onUpdateMedicationStatus,
+  onUpdateMedication,
   onRecordVisit,
   onUpdateVisitStage,
   onUpdateVisitNotes,
+  onRecordVital,
   onRecordLab,
   onMarkLabReviewed,
   onAddAllergy,
@@ -174,6 +191,50 @@ export function PaperPatientWorkspace({
   const [isMriModalOpen, setIsMriModalOpen] = useState(false);
 
   // Five interactive detail overlay sheet states
+  const [isRecordVitalOpen, setIsRecordVitalOpen] = useState(false);
+  const [selectedVitalMetric, setSelectedVitalMetric] = useState<'pulse' | 'pressure' | 'oxygen' | 'glucose' | 'temp' | 'weight'>('pulse');
+  const [vitalValueInput, setVitalValueInput] = useState('');
+  const [vitalDateInput, setVitalDateInput] = useState(new Date().toISOString().slice(0, 16));
+  const [isSubmittingVital, setIsSubmittingVital] = useState(false);
+
+  const VITAL_CONFIGS: Record<string, { label: string; unit: string; placeholder: string; helper: string }> = {
+    pulse: { label: 'Heart Rate / Pulse', unit: 'bpm', placeholder: '72', helper: 'Normal resting: 60-100 bpm' },
+    pressure: { label: 'Blood Pressure', unit: 'mmHg', placeholder: '120/80', helper: 'Systolic / Diastolic' },
+    oxygen: { label: 'SpO2 Oxygen Saturation', unit: '%', placeholder: '98', helper: 'Normal range: 95-100%' },
+    glucose: { label: 'Blood Glucose', unit: 'mg/dL', placeholder: '95', helper: 'Fasting: 70-99 mg/dL' },
+    temp: { label: 'Body Temperature', unit: '°C', placeholder: '37.0', helper: 'Normal oral: 36.5 - 37.5 °C' },
+    weight: { label: 'Body Weight', unit: 'kg', placeholder: '72.5', helper: 'Standard body weight' },
+  };
+
+  const handleOpenRecordVital = (metric: 'pulse' | 'pressure' | 'oxygen' | 'glucose' | 'temp' | 'weight' = 'pulse') => {
+    setSelectedVitalMetric(metric);
+    setVitalValueInput('');
+    setVitalDateInput(new Date().toISOString().slice(0, 16));
+    setIsRecordVitalOpen(true);
+  };
+
+  const handleSaveVital = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vitalValueInput.trim()) return;
+    setIsSubmittingVital(true);
+    try {
+      if (onRecordVital) {
+        await onRecordVital({
+          metric: selectedVitalMetric,
+          value: vitalValueInput.trim(),
+          unit: VITAL_CONFIGS[selectedVitalMetric]?.unit || '',
+          measuredAt: vitalDateInput ? new Date(vitalDateInput).toISOString() : new Date().toISOString(),
+        });
+      }
+      setIsRecordVitalOpen(false);
+      setVitalValueInput('');
+    } catch (err) {
+      console.error('Failed to record vital:', err);
+    } finally {
+      setIsSubmittingVital(false);
+    }
+  };
+
   const [isSocialHistoryOpen, setIsSocialHistoryOpen] = useState(false);
   const [isCarePlanOpen, setIsCarePlanOpen] = useState(false);
   const [isVitalsOpen, setIsVitalsOpen] = useState(false);
@@ -731,24 +792,40 @@ export function PaperPatientWorkspace({
 
                     {/* Live Vital Signs Panel (5 cols) */}
                     <div className="md:col-span-5 bg-[var(--color-surface-subtle)] rounded-[22px] p-3 sm:p-3.5 border border-white/60 shadow-xs flex flex-col justify-between gap-2 h-full">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-1">
                         <span className="text-[10px] font-bold text-[var(--color-ink-muted)] uppercase tracking-wider">
                           Current Vital Signs
                         </span>
-                        <span className={clsx(
-                          'flex items-center gap-1 text-[9.5px] font-semibold',
-                          hasTelemetry ? 'text-[var(--color-status-success)]' : 'text-[var(--color-ink-muted)]'
-                        )}>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRecordVital('pulse')}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-white text-[var(--color-ink)] hover:bg-stone-100 border border-[var(--color-border-hairline)] shadow-2xs hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                            title="Record new vital reading"
+                          >
+                            <Plus className="w-2.5 h-2.5 text-[var(--color-ink-muted)]" />
+                            <span>+ Log</span>
+                          </button>
                           <span className={clsx(
-                            'w-1.5 h-1.5 rounded-full',
-                            hasTelemetry ? 'bg-[var(--color-status-success)] animate-pulse' : 'bg-black/20'
-                          )} />
-                          {hasTelemetry ? 'Telemetry Active' : 'No Vitals Logged'}
-                        </span>
+                            'flex items-center gap-1 text-[9.5px] font-semibold',
+                            hasTelemetry ? 'text-[var(--color-status-success)]' : 'text-[var(--color-ink-muted)]'
+                          )}>
+                            <span className={clsx(
+                              'w-1.5 h-1.5 rounded-full',
+                              hasTelemetry ? 'bg-[var(--color-status-success)] animate-pulse' : 'bg-black/20'
+                            )} />
+                            {hasTelemetry ? 'Active' : 'No Log'}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                        <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRecordVital('pulse')}
+                          className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] hover:bg-stone-100 border border-white/40 hover:border-black/10 flex flex-col justify-between text-left cursor-pointer transition-all hover:scale-[1.02]"
+                          title="Click to record Heart Rate"
+                        >
                           <div className="flex items-center justify-between text-[9.5px] text-[var(--color-ink-muted)]">
                             <span className="font-medium">Heart Rate</span>
                             <Activity className="w-2.5 h-2.5 text-[var(--color-status-success)]" />
@@ -757,10 +834,15 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestPulse}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">bpm</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{pulseObs ? "Normal sinus" : (isDemo ? "Normal sinus" : "Not recorded")}</span>
-                        </div>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{pulseObs ? "Normal sinus" : (isDemo ? "Normal sinus" : "Click to log")}</span>
+                        </button>
 
-                        <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRecordVital('pressure')}
+                          className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] hover:bg-stone-100 border border-white/40 hover:border-black/10 flex flex-col justify-between text-left cursor-pointer transition-all hover:scale-[1.02]"
+                          title="Click to record Blood Pressure"
+                        >
                           <div className="flex items-center justify-between text-[9.5px] text-[var(--color-ink-muted)]">
                             <span className="font-medium">Blood Pressure</span>
                             <Heart className="w-2.5 h-2.5 text-[var(--color-status-success)]" />
@@ -769,10 +851,15 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestPressure}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">mmHg</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{pressureObs ? "Normotensive" : (isDemo ? "Normotensive" : "Not recorded")}</span>
-                        </div>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{pressureObs ? "Normotensive" : (isDemo ? "Normotensive" : "Click to log")}</span>
+                        </button>
 
-                        <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRecordVital('oxygen')}
+                          className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] hover:bg-stone-100 border border-white/40 hover:border-black/10 flex flex-col justify-between text-left cursor-pointer transition-all hover:scale-[1.02]"
+                          title="Click to record Oxygen SpO2"
+                        >
                           <div className="flex items-center justify-between text-[9.5px] text-[var(--color-ink-muted)]">
                             <span className="font-medium">SpO2 Oxygen</span>
                             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-status-success)]" />
@@ -781,10 +868,15 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestOxygen}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">%</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{oxygenObs ? "Room air" : (isDemo ? "Room air" : "Not recorded")}</span>
-                        </div>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{oxygenObs ? "Room air" : (isDemo ? "Room air" : "Click to log")}</span>
+                        </button>
 
-                        <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRecordVital('glucose')}
+                          className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] hover:bg-stone-100 border border-white/40 hover:border-black/10 flex flex-col justify-between text-left cursor-pointer transition-all hover:scale-[1.02]"
+                          title="Click to record Blood Glucose"
+                        >
                           <div className="flex items-center justify-between text-[9.5px] text-[var(--color-ink-muted)]">
                             <span className="font-medium">Glucose</span>
                             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-status-success)]" />
@@ -793,8 +885,8 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestGlucose}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">mg/dL</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{glucoseObs ? "Fasting glycemia" : (isDemo ? "Fasting glycemia" : "Not recorded")}</span>
-                        </div>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{glucoseObs ? "Fasting glycemia" : (isDemo ? "Fasting glycemia" : "Click to log")}</span>
+                        </button>
                       </div>
                     </div>
                   </motion.div>
@@ -1017,6 +1109,7 @@ export function PaperPatientWorkspace({
               onStartMedication={onStartMedication}
               onChangeDose={onChangeMedicationDose}
               onUpdateStatus={onUpdateMedicationStatus}
+              onUpdateMedication={onUpdateMedication}
             />
           </div>
         ) : activeTab === 'Visits' ? (
@@ -1550,7 +1643,17 @@ export function PaperPatientWorkspace({
               <span className="text-[10px] font-bold text-[var(--color-ink-muted)] uppercase tracking-wider">
                 Recorded Observations ({sortedVitals.length} total)
               </span>
-              <span className="text-[10px] text-[var(--color-ink-muted)]">Showing latest entries</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setIsVitalsOpen(false); handleOpenRecordVital('pulse'); }}
+                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-ink)] text-white hover:bg-black transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>+ Record New Reading</span>
+                </button>
+                <span className="text-[10px] text-[var(--color-ink-muted)]">Showing latest entries</span>
+              </div>
             </div>
 
             <div className="max-h-[340px] overflow-y-auto border border-stone-200 rounded-xl overflow-hidden">
@@ -1592,6 +1695,101 @@ export function PaperPatientWorkspace({
             </div>
           </div>
         </div>
+      </OverlaySheet>
+
+      {/* 3b. Record Vital Signs Modal */}
+      <OverlaySheet
+        isOpen={isRecordVitalOpen}
+        onClose={() => setIsRecordVitalOpen(false)}
+        title="Record Clinical Vital Sign"
+        className="max-w-lg"
+      >
+        <form onSubmit={handleSaveVital} className="space-y-4 font-['Inter',sans-serif] text-xs">
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-ink)] mb-2">
+              Select Metric
+            </label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['pulse', 'pressure', 'oxygen', 'glucose', 'temp', 'weight'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setSelectedVitalMetric(m)}
+                  className={clsx(
+                    'p-2 rounded-xl text-left border transition-all cursor-pointer',
+                    selectedVitalMetric === m
+                      ? 'bg-[var(--color-ink)] text-white border-[var(--color-ink)] shadow-xs'
+                      : 'bg-stone-50 hover:bg-stone-100 text-[var(--color-ink)] border-stone-200'
+                  )}
+                >
+                  <div className="font-bold text-[11px] capitalize">{m === 'oxygen' ? 'SpO2 Oxygen' : m === 'temp' ? 'Temperature' : m}</div>
+                  <div className={clsx('text-[9px]', selectedVitalMetric === m ? 'text-white/80' : 'text-[var(--color-ink-muted)]')}>
+                    {VITAL_CONFIGS[m].unit}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-[var(--color-ink)]">
+                Reading Value ({VITAL_CONFIGS[selectedVitalMetric].unit})
+              </label>
+              <span className="text-[10px] text-[var(--color-ink-muted)]">
+                {VITAL_CONFIGS[selectedVitalMetric].helper}
+              </span>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                required
+                value={vitalValueInput}
+                onChange={(e) => setVitalValueInput(e.target.value)}
+                placeholder={VITAL_CONFIGS[selectedVitalMetric].placeholder}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 text-sm font-bold bg-white text-[var(--color-ink)] focus:outline-none focus:ring-2 focus:ring-black/10 pr-16"
+                autoFocus
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[var(--color-ink-muted)] pointer-events-none">
+                {VITAL_CONFIGS[selectedVitalMetric].unit}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
+              Date &amp; Time of Observation
+            </label>
+            <input
+              type="datetime-local"
+              value={vitalDateInput}
+              onChange={(e) => setVitalDateInput(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-white text-[var(--color-ink)] focus:outline-none focus:ring-2 focus:ring-black/10"
+            />
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-200 flex items-start gap-2 text-[11px] text-[var(--color-ink-muted)]">
+            <span className="font-bold text-[var(--color-ink)]">Note:</span>
+            <span>Recorded vitals are instantly projected into the longitudinal timeline and telemetry strips with clinician provenance.</span>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-200">
+            <button
+              type="button"
+              onClick={() => setIsRecordVitalOpen(false)}
+              className="px-4 py-2 rounded-full border border-stone-200 text-xs font-semibold text-[var(--color-ink)] hover:bg-stone-50 transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmittingVital || !vitalValueInput.trim()}
+              className="px-5 py-2 rounded-full bg-[var(--color-ink)] text-white text-xs font-bold hover:bg-black transition-all shadow-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+            >
+              {isSubmittingVital ? 'Recording...' : 'Save Vital Reading'}
+            </button>
+          </div>
+        </form>
       </OverlaySheet>
 
       {/* 4. Complete Patient Health Records Overlay */}

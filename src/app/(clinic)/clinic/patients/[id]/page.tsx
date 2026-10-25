@@ -17,6 +17,7 @@ import {
   fetchPatientByIdAction,
   fetchPatientEventsAction,
   fetchPatientVitalsAction,
+  createVitalAction,
   fetchPatientAllergiesAction,
   fetchPatientLabsAction,
   createCareEventAction,
@@ -24,6 +25,7 @@ import {
   createMedicationAction,
   updateMedicationStatusAction,
   updateMedicationDoseAction,
+  updateMedicationAction,
   fetchPatientVisitsAction,
   createVisitAction,
   updateVisitStageAction,
@@ -218,6 +220,26 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
     }
   };
 
+  const handleUpdateMedication = async (
+    medId: string,
+    data: {
+      name?: string;
+      tradeName?: string;
+      strength?: string;
+      dosesPerDay?: number;
+      route?: string;
+      instructions?: string;
+      startDate?: string;
+    }
+  ) => {
+    const res = await updateMedicationAction({ medicationId: medId, ...data });
+    if (res.success && res.data) {
+      setMedications((prev) => prev.map((m) => (m.id === medId ? res.data! : m)));
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
+    }
+  };
+
   const handleRecordVisit = async (newVisit: {
     title: string;
     visitType: string;
@@ -253,6 +275,28 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
     const res = await updateVisitNotesAction(visitId, data);
     if (res.success && res.data) {
       setVisits((prev) => prev.map((v) => (v.id === visitId ? res.data! : v)));
+    }
+  };
+
+  const handleRecordVital = async (vitalData: {
+    metric: string;
+    value: string;
+    unit: string;
+    measuredAt?: string;
+  }) => {
+    const res = await createVitalAction({
+      patientId,
+      metric: vitalData.metric,
+      value: vitalData.value,
+      unit: vitalData.unit,
+      measuredAt: vitalData.measuredAt,
+      source: 'doctor',
+      createdBy: 'Dr. Tarek',
+    });
+    if (res.success && res.data) {
+      setVitals((prev) => [res.data!, ...prev]);
+      const updatedEvents = await fetchPatientEventsAction(patientId);
+      setCareEvents(updatedEvents);
     }
   };
 
@@ -415,10 +459,12 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
         onStartMedication={handleStartMedication}
         onChangeMedicationDose={handleChangeMedicationDose}
         onUpdateMedicationStatus={handleUpdateMedicationStatus}
+        onUpdateMedication={handleUpdateMedication}
         onRecordVisit={handleRecordVisit}
         onUpdateVisitStage={handleUpdateVisitStage}
         onUpdateVisitNotes={handleUpdateVisitNotes}
         onRecordLab={handleRecordLab}
+        onRecordVital={handleRecordVital}
         onMarkLabReviewed={handleMarkLabReviewed}
         imaging={imaging}
         genetics={genetics}

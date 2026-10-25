@@ -1064,6 +1064,60 @@ export async function updateMedicationDose(
   return updated;
 }
 
+/**
+ * Update a medication's editable fields (name, trade name, strength, route, instructions, start date).
+ */
+export async function updateMedication(
+  medicationId: string,
+  input: {
+    name?: string;
+    tradeName?: string;
+    strength?: string;
+    dosesPerDay?: number;
+    route?: string;
+    instructions?: string;
+    startDate?: string;
+  }
+): Promise<Medication | null> {
+  const store = readStore();
+  const index = (store.medications || []).findIndex((m: Medication) => m.id === medicationId);
+  if (index === -1) return null;
+
+  const current = store.medications[index];
+  const now = new Date().toISOString();
+  const updated: Medication = {
+    ...current,
+    name: input.name?.trim() || current.name,
+    tradeName: input.tradeName?.trim() || current.tradeName,
+    strength: input.strength?.trim() || current.strength,
+    dosesPerDay: input.dosesPerDay ?? current.dosesPerDay,
+    route: input.route || current.route,
+    instructions: input.instructions !== undefined ? input.instructions : current.instructions,
+    startDate: input.startDate || current.startDate,
+  };
+
+  store.medications[index] = updated;
+
+  // Project onto timeline care_events
+  const careEvent: CareEvent = {
+    id: `ce-${Date.now()}`,
+    orgId: current.orgId,
+    patientId: current.patientId,
+    kind: 'medication',
+    label: `Update: ${updated.tradeName || updated.name} ${updated.strength}`,
+    summary: `Medication updated: ${updated.tradeName || updated.name} ${updated.strength} (${updated.dosesPerDay}x daily, ${updated.route})`,
+    occurredAt: now,
+    sourceTable: 'medications',
+    sourceId: updated.id,
+    source: 'doctor',
+    createdBy: 'Dr. Tarek',
+  };
+  store.careEvents = [careEvent, ...(store.careEvents || [])];
+
+  writeStore(store);
+  return updated;
+}
+
 export async function getPatientVisits(patientId: string): Promise<Visit[]> {
   const sql = getDb();
   if (sql) {

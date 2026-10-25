@@ -372,7 +372,8 @@ export function InteractiveTimeline({
 
   const orphanGroups = new Map<string, CareEvent[]>();
   orphans.forEach((e) => {
-    const key = `${e.kind}::${e.label}`;
+    const dayKey = e.occurredAt ? e.occurredAt.slice(0, 10) : 'unknown';
+    const key = dayKey + "::" + e.kind + "::" + e.label;
     orphanGroups.set(key, [...(orphanGroups.get(key) || []), e]);
   });
   let orphanLi = 0;
@@ -696,6 +697,9 @@ export function InteractiveTimeline({
                 const cl = clusterOfMilestone.get(pm.id);
                 mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
                 my = AXIS_Y + nodeD / 2;
+              } else {
+                mx = tx(c.date);
+                my = AXIS_Y;
               }
               const cx = p.x;
               const nodeTop = p.y + (c.kind === 'imaging' ? 2 : 16);
@@ -714,11 +718,19 @@ export function InteractiveTimeline({
 
             {/* Curvy wires connecting milestones to overflow "+N more" items */}
             {laid.overflowItems.map((ov) => {
-              const pm = milestones.find((m) => m.id === ov.parent);
-              if (!pm) return null;
-              const cl = clusterOfMilestone.get(pm.id);
-              const mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
-              const my = AXIS_Y + nodeD / 2;
+              const isAxis = ov.parent.startsWith('axis');
+              let mx = ov.x;
+              let my = AXIS_Y;
+              if (!isAxis) {
+                const pm = milestones.find((m) => m.id === ov.parent);
+                if (!pm) return null;
+                const cl = clusterOfMilestone.get(pm.id);
+                mx = cl ? cl.cx : tx(parseDate(pm.occurredAt));
+                my = AXIS_Y + nodeD / 2;
+              } else {
+                mx = ov.x;
+                my = AXIS_Y;
+              }
               const cx = ov.x;
               const nodeTop = ov.y + 12;
 

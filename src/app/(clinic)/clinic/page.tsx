@@ -60,8 +60,17 @@ export default function ClinicHomePage() {
 
   // Neon Auth Session (Google OAuth user info)
   const { data: session } = authClient.useSession();
-  const sessionUser = session?.user;
-  const doctorDisplayName = sessionUser?.name || sessionUser?.email?.split('@')[0] || dict.doctorMenu.doctorName;
+  const [resolvedUser, setResolvedUser] = React.useState<any>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    authClient.getSession().then((res: any) => {
+      if (cancelled) return;
+      if (res?.data?.user) setResolvedUser(res.data.user);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const sessionUser = (session?.user as any) || resolvedUser;
+  const doctorDisplayName = sessionUser?.name || sessionUser?.email?.split('@')[0] || 'Clinician';
   const doctorAvatarUrl = sessionUser?.image;
 
   const [patients, setPatients] = useState<Patient[]>([]);

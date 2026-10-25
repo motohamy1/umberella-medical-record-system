@@ -19,6 +19,7 @@ import {
   createMedication,
   updateMedicationStatus,
   updateMedicationDose,
+  updateMedication,
   getPatientVisits,
   getVisitById,
   getVisitVitals,
@@ -424,6 +425,28 @@ export async function updateMedicationDoseAction(
       success: false,
       error: message,
     };
+  }
+}
+
+export async function updateMedicationAction(input: {
+  medicationId: string;
+  name?: string;
+  tradeName?: string;
+  strength?: string;
+  dosesPerDay?: number;
+  route?: string;
+  instructions?: string;
+  startDate?: string;
+}): Promise<ActionState<Medication>> {
+  try {
+    const updated = await updateMedication(input.medicationId, input);
+    if (!updated) {
+      return { success: false, error: 'Medication not found' };
+    }
+    return { success: true, data: updated };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to update medication';
+    return { success: false, error: message };
   }
 }
 

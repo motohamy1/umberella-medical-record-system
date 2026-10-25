@@ -21,7 +21,7 @@ export const en = {
     recordedBy: 'Recorded {date} by {name}',
   },
   doctorMenu: {
-    doctorName: 'Dr. Tarek',
+    doctorName: 'Clinician',
     communication: 'Communication',
     members: 'Members',
     audit: 'Audit',

@@ -60,6 +60,15 @@ interface MedicationsTabViewProps {
   }) => Promise<void>;
   onChangeDose?: (medId: string, newStrength: string, dosesPerDay: number, reason: string) => Promise<void>;
   onUpdateStatus?: (medId: string, status: MedicationStatus, reason?: string) => Promise<void>;
+  onUpdateMedication?: (medId: string, data: {
+    name?: string;
+    tradeName?: string;
+    strength?: string;
+    dosesPerDay?: number;
+    route?: string;
+    instructions?: string;
+    startDate?: string;
+  }) => Promise<void>;
   className?: string;
 }
 
@@ -71,6 +80,7 @@ export function MedicationsTabView({
   onStartMedication,
   onChangeDose,
   onUpdateStatus,
+  onUpdateMedication,
   className,
 }: MedicationsTabViewProps) {
   const dict = en.medications;
@@ -81,6 +91,16 @@ export function MedicationsTabView({
   const [isOcrOpen, setIsOcrOpen] = useState(false);
   const [selectedMedForDose, setSelectedMedForDose] = useState<Medication | null>(null);
   const [selectedMedForStop, setSelectedMedForStop] = useState<Medication | null>(null);
+  const [selectedMedForEdit, setSelectedMedForEdit] = useState<Medication | null>(null);
+
+  // Edit form state
+  const [editTradeName, setEditTradeName] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editStrength, setEditStrength] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editDosesPerDay, setEditDosesPerDay] = useState(1);
+  const [editRoute, setEditRoute] = useState('Oral');
+  const [editInstructions, setEditInstructions] = useState('');
 
   // Form states: New Medication
   const [newTradeName, setNewTradeName] = useState('');
@@ -246,6 +266,39 @@ export function MedicationsTabView({
   const handleOpenStopModal = (med: Medication) => {
     setSelectedMedForStop(med);
     setStopReason('');
+  };
+
+  const handleOpenEditModal = (med: Medication) => {
+    setSelectedMedForEdit(med);
+    setEditTradeName(med.tradeName || '');
+    setEditName(med.name || '');
+    setEditStrength(med.strength || '');
+    setEditStartDate(med.startDate ? med.startDate.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setEditDosesPerDay(med.dosesPerDay || 1);
+    setEditRoute(med.route || 'Oral');
+    setEditInstructions(med.instructions || '');
+  };
+
+  const handleSubmitEditMed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMedForEdit) return;
+    setIsSubmitting(true);
+    try {
+      if (onUpdateMedication) {
+        await onUpdateMedication(selectedMedForEdit.id, {
+          name: editName.trim() || selectedMedForEdit.name,
+          tradeName: editTradeName.trim() || undefined,
+          strength: editStrength.trim(),
+          dosesPerDay: editDosesPerDay,
+          route: editRoute,
+          instructions: editInstructions.trim() || undefined,
+          startDate: editStartDate ? new Date(editStartDate).toISOString() : selectedMedForEdit.startDate,
+        });
+      }
+      setSelectedMedForEdit(null);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmitNewMed = async (e: React.FormEvent) => {
@@ -520,6 +573,16 @@ export function MedicationsTabView({
                                 <span>{dict.showOnTimeline}</span>
                               </button>
                             )}
+
+                            {/* Edit medication */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(med)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--color-white)] hover:bg-[var(--color-surface)] text-[11px] font-medium text-[var(--color-ink)] border border-black/5 shadow-2xs transition-all cursor-pointer"
+                            >
+                              <Sliders className="w-3 h-3 text-[var(--color-ink-muted)]" />
+                              <span>Edit</span>
+                            </button>
 
                             {/* Change dose */}
                             <button
@@ -1046,6 +1109,114 @@ export function MedicationsTabView({
               className="px-4 py-1.5 rounded-full bg-rose-600 text-white text-xs font-semibold shadow-xs hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? 'Stopping...' : 'Confirm Discontinue'}
+            </button>
+          </div>
+        </form>
+      </OverlaySheet>
+
+      {/* ========================================================================= */}
+      {/* 7b. MODAL: EDIT MEDICATION                                                 */}
+      {/* ========================================================================= */}
+      <OverlaySheet
+        isOpen={Boolean(selectedMedForEdit)}
+        onClose={() => setSelectedMedForEdit(null)}
+        title={`Edit Prescription: ${selectedMedForEdit?.tradeName || selectedMedForEdit?.name}`}
+        className="max-w-lg"
+      >
+        <form onSubmit={handleSubmitEditMed} className="flex flex-col gap-4 p-4 sm:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-[var(--color-ink)]">Trade / Brand Name</label>
+              <input
+                type="text"
+                value={editTradeName}
+                onChange={(e) => setEditTradeName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs font-bold text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-[var(--color-ink)]">Concentration / Strength *</label>
+              <input
+                type="text"
+                required
+                value={editStrength}
+                onChange={(e) => setEditStrength(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs font-semibold text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-[var(--color-ink-muted)]">Scientific / Generic Name</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-[var(--color-ink)]">Frequency (Doses / Day)</label>
+              <select
+                value={editDosesPerDay}
+                onChange={(e) => setEditDosesPerDay(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+              >
+                <option value={1}>1× daily (QD)</option>
+                <option value={2}>2× daily (BID)</option>
+                <option value={3}>3× daily (TID)</option>
+                <option value={4}>4× daily (QID)</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-[var(--color-ink)]">Administration Route</label>
+              <select
+                value={editRoute}
+                onChange={(e) => setEditRoute(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+              >
+                <option value="Oral">Oral (PO)</option>
+                <option value="Sublingual">Sublingual (SL)</option>
+                <option value="Subcutaneous">Subcutaneous (SC)</option>
+                <option value="Intravenous">Intravenous (IV)</option>
+                <option value="Intramuscular">Intramuscular (IM)</option>
+                <option value="Inhalation">Inhalation</option>
+                <option value="Topical">Topical</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-[var(--color-ink)]">Prescription Date</label>
+            <input
+              type="date"
+              value={editStartDate}
+              onChange={(e) => setEditStartDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs font-semibold text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-[var(--color-ink)]">{dict.instructions}</label>
+            <textarea
+              rows={2}
+              value={editInstructions}
+              onChange={(e) => setEditInstructions(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/5">
+            <button
+              type="button"
+              onClick={() => setSelectedMedForEdit(null)}
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold text-[var(--color-ink-muted)] hover:bg-black/5 cursor-pointer"
+            >
+              {dict.cancel}
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-1.5 rounded-full bg-[var(--color-ink)] text-white text-xs font-semibold shadow-xs hover:bg-black disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
