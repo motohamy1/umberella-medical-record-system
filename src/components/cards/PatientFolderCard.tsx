@@ -204,8 +204,10 @@ export function PatientFolderCard({
               </div>
               {/* Patient Full Name with full horizontal space */}
               <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-[13px] text-[var(--color-ink)] truncate leading-tight group-hover:text-[var(--color-ink)]" title={patient.name}>
-                  {patient.name}
+                <h3 className="font-bold text-[13px] text-[var(--color-ink)] leading-tight group-hover:text-[var(--color-ink)]" title={patient.name}>
+                  <bdi dir="auto" className="block truncate text-start">
+                    {patient.name}
+                  </bdi>
                 </h3>
               </div>
             </div>

@@ -50,6 +50,7 @@ import type {
   VisitStage,
   ImagingStudy,
   GeneticFinding,
+  ActiveIngredient,
 } from '@/data/types';
 import { PaperPatientWorkspace } from '@/components/patient/PaperPatientWorkspace';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
@@ -171,10 +172,13 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
 
   const handleStartMedication = async (newMed: {
     name: string;
+    tradeName?: string;
     strength: string;
+    activeIngredients?: ActiveIngredient[];
     dosesPerDay: number;
     route: string;
     instructions?: string;
+    startDate?: string;
   }) => {
     const res = await createMedicationAction({
       patientId,

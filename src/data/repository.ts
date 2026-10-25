@@ -15,6 +15,7 @@ import type {
   Allergy,
   LabResult,
   Medication,
+  ActiveIngredient,
   MedicationEvent,
   MedicationStatus,
   Visit,
@@ -368,19 +369,25 @@ export async function createPatient(input: CreatePatientInput): Promise<Patient>
   const nextSeq = (store.patients?.length || 0) + 1;
   const seqPadded = String(nextSeq).padStart(4, '0');
   const nowIso = new Date().toISOString();
-  const todayFormatted = '14 Oct 2026';
+  const todayFormatted = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  // Derive approximate date of birth if omitted
+  const birthYear = new Date().getFullYear() - (input.age || 30);
+  const safeDob = input.dateOfBirth && input.dateOfBirth.trim() ? input.dateOfBirth : `${birthYear}-01-01`;
+  const safePhone = input.phone && input.phone.trim() ? input.phone : 'Not provided';
+  const safeConcern = input.primaryConcern && input.primaryConcern.trim() ? input.primaryConcern : 'Clinical Evaluation';
 
   const newPatient: Patient = {
     id: `p-${Date.now()}`,
     orgId: 'org-nile',
     mrn: `MRN-2026-${seqPadded}`,
     name: input.name,
-    sex: input.sex,
+    sex: input.sex || 'Other',
     age: input.age,
-    dateOfBirth: input.dateOfBirth,
-    phone: input.phone,
-    status: input.status as PatientStatus,
-    primaryConcern: input.primaryConcern,
+    dateOfBirth: safeDob,
+    phone: safePhone,
+    status: (input.status || 'New') as PatientStatus,
+    primaryConcern: safeConcern,
     socialHistory: input.socialHistory || 'Not recorded',
     carePlan: input.carePlan || 'Standard Clinical Observation',
     lastVisitDate: todayFormatted,
@@ -419,21 +426,18 @@ export async function createPatient(input: CreatePatientInput): Promise<Patient>
 
   store.patients = [newPatient, ...(store.patients || [])];
 
-  // Intake care event
-  const newCareEvent: CareEvent = {
-    id: `ce-${Date.now()}`,
-    orgId: 'org-nile',
+  // Intake care event with real persistence
+  await createCareEvent({
     patientId: newPatient.id,
     kind: 'visit',
     label: 'Initial Patient Intake',
-    summary: `${input.primaryConcern}. Status: ${input.status}.`,
-    occurredAt: todayFormatted,
+    summary: `${safeConcern}. Status: ${newPatient.status}.`,
+    occurredAt: nowIso,
+    sourceTable: 'patients',
+    sourceId: newPatient.id,
     source: 'staff',
     createdBy: 'Staff Receptionist',
-  };
-
-  store.careEvents = [newCareEvent, ...(store.careEvents || [])];
-  writeStore(store);
+  });
 
   return newPatient;
 }
@@ -461,6 +465,27 @@ export async function deletePatient(id: string): Promise<boolean> {
 }
 
 export async function getPatientCareEvents(patientId: string): Promise<CareEvent[]> {
+  const sql = getDb();
+  if (sql) {
+    try {
+      const rows = (await (sql as any).query(
+        `SELECT id, org_id as "orgId", patient_id as "patientId", kind, occurred_at as "occurredAt", ended_at as "endedAt", visit_id as "visitId", source_table as "sourceTable", source_id as "sourceId", label, summary, source, created_by as "createdBy", verified_by as "verifiedBy", verified_at as "verifiedAt"
+         FROM care_events
+         WHERE patient_id = $1 AND deleted_at IS NULL
+         ORDER BY occurred_at DESC`,
+        [patientId]
+      )) as any[];
+      if (rows && rows.length > 0) {
+        return rows.map((r) => ({
+          ...r,
+          occurredAt: toISO(r.occurredAt),
+          endedAt: toISOOrNull(r.endedAt),
+        }));
+      }
+    } catch (err) {
+      console.warn('Neon query care_events failed, fallback to store:', err);
+    }
+  }
   const store = readStore();
   return (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
 }
@@ -696,6 +721,8 @@ export async function createCareEvent(eventData: {
   label: string;
   summary: string;
   occurredAt?: string;
+  sourceTable?: string;
+  sourceId?: string;
   source?: ProvenanceSource;
   createdBy?: string;
 }): Promise<CareEvent> {
@@ -704,16 +731,43 @@ export async function createCareEvent(eventData: {
   const now = eventData.occurredAt || new Date().toISOString();
 
   const newEvent: CareEvent = {
-    id: `ce-${Date.now()}`,
+    id: `ce-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     orgId: patient?.orgId || 'org-nile',
     patientId: eventData.patientId,
     kind: eventData.kind,
     label: eventData.label,
     summary: eventData.summary || 'Recorded by clinician',
     occurredAt: now,
+    sourceTable: eventData.sourceTable || 'direct',
+    sourceId: eventData.sourceId || `src-${Date.now()}`,
     source: eventData.source || 'doctor',
     createdBy: eventData.createdBy || 'Dr. Tarek',
   };
+
+  const sql = getDb();
+  if (sql) {
+    try {
+      await (sql as any).query(
+        `INSERT INTO care_events (id, org_id, patient_id, kind, occurred_at, source_table, source_id, label, summary, source, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          newEvent.id,
+          newEvent.orgId,
+          newEvent.patientId,
+          newEvent.kind,
+          newEvent.occurredAt,
+          newEvent.sourceTable,
+          newEvent.sourceId,
+          newEvent.label,
+          newEvent.summary,
+          newEvent.source,
+          newEvent.createdBy,
+        ]
+      );
+    } catch (err) {
+      console.warn('Neon insert care_events failed, fallback to store:', err);
+    }
+  }
 
   store.careEvents = [newEvent, ...(store.careEvents || [])];
 
@@ -808,7 +862,9 @@ export async function getPatientMedicationEvents(patientId: string): Promise<Med
 export async function createMedication(input: {
   patientId: string;
   name: string;
+  tradeName?: string;
   strength: string;
+  activeIngredients?: ActiveIngredient[];
   dosesPerDay?: number;
   route?: string;
   instructions?: string;
@@ -822,20 +878,36 @@ export async function createMedication(input: {
   const medId = `med-${Date.now()}`;
   const orgId = patient?.orgId || 'org-nile';
 
+  // Format active ingredients if present
+  let activeIngredientsText = '';
+  if (input.activeIngredients && input.activeIngredients.length > 0) {
+    activeIngredientsText = input.activeIngredients
+      .filter((ing) => ing.name && ing.name.trim())
+      .map((ing) => `${ing.name.trim()} (${ing.strength.trim()})`)
+      .join(' + ');
+  }
+
+  const fullInstructions = activeIngredientsText
+    ? (input.instructions ? `${input.instructions} [Active: ${activeIngredientsText}]` : `Active: ${activeIngredientsText}`)
+    : (input.instructions || '');
+
   const newMed: Medication = {
     id: medId,
     orgId,
     patientId: input.patientId,
     name: input.name,
+    tradeName: input.tradeName || input.name,
     strength: input.strength,
+    activeIngredients: input.activeIngredients,
+    activeIngredientsText,
     dosesPerDay: input.dosesPerDay || 1,
-    route: input.route || 'oral',
-    instructions: input.instructions || '',
+    route: input.route || 'Oral',
+    instructions: fullInstructions,
     status: 'active',
     startDate: now,
     source: input.source || 'doctor',
     createdBy: input.createdBy || 'Dr. Tarek',
-    createdAt: now,
+    createdAt: new Date().toISOString(),
   };
 
   const sql = getDb();
@@ -860,28 +932,25 @@ export async function createMedication(input: {
     patientId: input.patientId,
     medicationId: medId,
     eventType: 'start',
-    detail: `${input.name} ${input.strength} initiated (${input.dosesPerDay || 1}x daily)`,
+    detail: `${input.name} ${input.strength} initiated (${input.dosesPerDay || 1}x daily)${activeIngredientsText ? ` [${activeIngredientsText}]` : ''}`,
     occurredAt: now,
     source: input.source || 'doctor',
     createdBy: input.createdBy || 'Dr. Tarek',
   };
   store.medicationEvents = [medEvent, ...(store.medicationEvents || [])];
 
-  // Project onto timeline care_events
-  const careEvent: CareEvent = {
-    id: `ce-${Date.now()}`,
-    orgId,
+  // Project onto timeline care_events and persist
+  await createCareEvent({
     patientId: input.patientId,
     kind: 'medication',
     label: `Start: ${input.name} ${input.strength}`,
-    summary: `${input.name} ${input.strength} (${input.dosesPerDay || 1}x daily, ${input.route || 'oral'})`,
+    summary: `${input.name} ${input.strength} (${input.dosesPerDay || 1}x daily, ${input.route || 'Oral'})${activeIngredientsText ? ` • Ingredients: ${activeIngredientsText}` : ''}`,
     occurredAt: now,
     sourceTable: 'medication_events',
     sourceId: medEvent.id,
     source: input.source || 'doctor',
     createdBy: input.createdBy || 'Dr. Tarek',
-  };
-  store.careEvents = [careEvent, ...(store.careEvents || [])];
+  });
 
   writeStore(store);
   return newMed;

@@ -3,6 +3,7 @@
 /**
  * AddPatientSheet — Modal sheet for registering a new patient.
  * Validates with Zod, submits via Server Action under RLS, and persists to data store.
+ * Only Name and Age are required. All other fields are optional.
  */
 
 import React, { useState } from 'react';
@@ -51,16 +52,23 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
     setErrorMessage(null);
     setFieldErrors({});
 
+    // If DOB is not given, derive approximate date from age
+    const currentYear = new Date().getFullYear();
+    const parsedAge = parseInt(formData.age, 10);
+    const derivedDob = !formData.dateOfBirth && !isNaN(parsedAge)
+      ? `${currentYear - parsedAge}-01-01`
+      : formData.dateOfBirth;
+
     const body = new FormData();
-    body.append('name', formData.name);
+    body.append('name', formData.name.trim());
     body.append('sex', formData.sex);
     body.append('age', formData.age);
-    body.append('dateOfBirth', formData.dateOfBirth);
-    body.append('phone', formData.phone);
+    body.append('dateOfBirth', derivedDob);
+    body.append('phone', formData.phone.trim());
     body.append('status', formData.status);
-    body.append('primaryConcern', formData.primaryConcern);
-    if (formData.socialHistory) body.append('socialHistory', formData.socialHistory);
-    if (formData.carePlan) body.append('carePlan', formData.carePlan);
+    body.append('primaryConcern', formData.primaryConcern.trim() || 'Clinical Care & Evaluation');
+    if (formData.socialHistory) body.append('socialHistory', formData.socialHistory.trim());
+    if (formData.carePlan) body.append('carePlan', formData.carePlan.trim());
 
     const res = await createPatientAction({ success: false }, body);
     setIsPending(false);
@@ -96,7 +104,7 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
           </div>
         )}
 
-        {/* Full Name */}
+        {/* Full Name (Required) */}
         <div>
           <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
             Full Name *
@@ -107,7 +115,7 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
             required
             value={formData.name}
             onChange={handleChange}
-            placeholder="e.g. Mostafa Ibrahim"
+            placeholder="e.g. Mostafa Ibrahim or مصطفى إبراهيم"
             className="w-full px-3.5 py-2 rounded-[var(--radius-pill)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/30 text-xs sm:text-sm text-[var(--color-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
           />
           {fieldErrors.name && (
@@ -115,11 +123,11 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
           )}
         </div>
 
-        {/* Sex & Age */}
+        {/* Sex & Age (Age is Required) */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-              Sex *
+              Sex
             </label>
             <select
               name="sex"
@@ -134,7 +142,7 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
           </div>
           <div>
             <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-              Age *
+              Age (Years) *
             </label>
             <input
               type="number"
@@ -153,16 +161,15 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
           </div>
         </div>
 
-        {/* Date of Birth & Phone */}
+        {/* Date of Birth & Phone (Both Optional) */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-              Date of Birth *
+              Date of Birth <span className="font-normal text-[var(--color-ink-muted)] text-[10px]">(Optional)</span>
             </label>
             <input
               type="date"
               name="dateOfBirth"
-              required
               value={formData.dateOfBirth}
               onChange={handleChange}
               className="w-full px-3 py-2 rounded-[var(--radius-pill)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/30 text-xs text-[var(--color-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
@@ -173,12 +180,11 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
           </div>
           <div>
             <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-              Phone Number *
+              Phone Number <span className="font-normal text-[var(--color-ink-muted)] text-[10px]">(Optional)</span>
             </label>
             <input
               type="tel"
               name="phone"
-              required
               value={formData.phone}
               onChange={handleChange}
               placeholder="e.g. +20 100 482 9102"
@@ -193,7 +199,7 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
         {/* Status */}
         <div>
           <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-            Clinical Status *
+            Clinical Status
           </label>
           <select
             name="status"
@@ -209,18 +215,17 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
           </select>
         </div>
 
-        {/* Primary Concern */}
+        {/* Primary Concern (Optional) */}
         <div>
           <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-            Primary Concern / Chief Complaint *
+            Primary Concern / Chief Complaint <span className="font-normal text-[var(--color-ink-muted)] text-[10px]">(Optional)</span>
           </label>
           <input
             type="text"
             name="primaryConcern"
-            required
             value={formData.primaryConcern}
             onChange={handleChange}
-            placeholder="e.g. Hypertension and T2D follow-up"
+            placeholder="e.g. Hypertension and T2D follow-up (or leave empty)"
             className="w-full px-3.5 py-2 rounded-[var(--radius-pill)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/30 text-xs sm:text-sm text-[var(--color-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--color-ink)]"
           />
           {fieldErrors.primaryConcern && (
@@ -231,7 +236,7 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
         {/* Social History (optional) */}
         <div>
           <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-            Social History (Optional)
+            Social History <span className="font-normal text-[var(--color-ink-muted)] text-[10px]">(Optional)</span>
           </label>
           <input
             type="text"
@@ -246,7 +251,7 @@ export function AddPatientSheet({ isOpen, onClose, onSuccess }: AddPatientSheetP
         {/* Care Plan (optional) */}
         <div>
           <label className="block text-xs font-semibold text-[var(--color-ink)] mb-1">
-            Active Care Plan (Optional)
+            Active Care Plan <span className="font-normal text-[var(--color-ink-muted)] text-[10px]">(Optional)</span>
           </label>
           <input
             type="text"

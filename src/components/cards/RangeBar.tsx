@@ -3,7 +3,8 @@
 /**
  * RangeBar — Lab reference range bar (PACK.md §4.5 #10, ref-2).
  * Hatched neutral track with thin colored segments:
- * [ Low | Borderline Low | Normal | Borderline High | High ]
+ * [ Low | Borderline Low | Normal Target | Borderline High | High ]
+ * Clear "Normal Range" indicator per Egyptian clinical laboratory standards.
  * Dark ink marker dot positioned at true measured value.
  */
 
@@ -136,10 +137,13 @@ export function RangeBar({
       </div>
 
       {showLabels && (
-        <div className="flex justify-between text-[10px] font-mono text-[var(--color-ink-muted)]">
-          <span>{autoMin} {unit}</span>
-          <span className="text-[9px] text-[var(--color-ink-muted)]">Ref: {low} - {high}</span>
-          <span>{autoMax} {unit}</span>
+        <div className="flex items-center justify-between text-[10px] font-mono text-[var(--color-ink-muted)]">
+          <span className="text-[9.5px] font-semibold text-[var(--color-ink)]">
+            Normal Range: {low} – {high} {unit}
+          </span>
+          <span className="text-[9px] text-[var(--color-ink-muted)]">
+            Scale: {autoMin}–{autoMax}
+          </span>
         </div>
       )}
     </div>

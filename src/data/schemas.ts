@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const CreatePatientSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  sex: z.enum(['Male', 'Female', 'Other']),
   age: z.coerce.number().int().min(0, 'Age must be positive').max(130, 'Invalid age'),
-  dateOfBirth: z.string().min(4, 'Date of birth is required'),
-  phone: z.string().min(6, 'Valid phone number is required'),
-  status: z.enum(['Stable', 'New', 'Follow-up', 'Needs review', 'Critical']),
-  primaryConcern: z.string().min(2, 'Primary concern is required'),
+  sex: z.enum(['Male', 'Female', 'Other']).default('Other'),
+  dateOfBirth: z.string().optional(),
+  phone: z.string().optional(),
+  status: z.enum(['Stable', 'New', 'Follow-up', 'Needs review', 'Critical']).default('New'),
+  primaryConcern: z.string().optional(),
   socialHistory: z.string().optional(),
   carePlan: z.string().optional(),
 });

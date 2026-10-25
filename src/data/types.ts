@@ -167,18 +167,27 @@ export interface LabResult {
 
 export type MedicationStatus = 'active' | 'paused' | 'stopped' | 'completed';
 
+export interface ActiveIngredient {
+  name: string;
+  strength: string;
+}
+
 export interface Medication {
   id: string;
   orgId: string;
   patientId: string;
   name: string;
+  tradeName?: string;
   strength: string;
+  activeIngredients?: ActiveIngredient[];
+  activeIngredientsText?: string;
   dosesPerDay: number;
   route: string;
   instructions?: string;
   status: MedicationStatus;
   startDate: string;
   endDate?: string | null;
+  stopReason?: string | null;
   source: ProvenanceSource;
   createdBy: string;
   createdAt?: string;
@@ -251,4 +260,3 @@ export interface ChatMessage {
     consentObtained?: boolean;
   };
 }
-

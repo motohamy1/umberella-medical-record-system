@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { clsx } from 'clsx';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, Plus, SlidersHorizontal, Heart, Activity, MessageSquare, FileCode, ShieldCheck, Sparkles, Pill, Trash2 } from 'lucide-react';
@@ -24,6 +25,7 @@ import type {
   VisitStatus,
   ImagingStudy,
   GeneticFinding,
+  ActiveIngredient,
 } from '@/data/types';
 import { MedicationsTabView } from './MedicationsTabView';
 import { VisitsTabView } from './VisitsTabView';
@@ -55,10 +57,13 @@ interface PaperPatientWorkspaceProps {
   }) => Promise<void>;
   onStartMedication?: (newMed: {
     name: string;
+    tradeName?: string;
     strength: string;
+    activeIngredients?: ActiveIngredient[];
     dosesPerDay: number;
     route: string;
     instructions?: string;
+    startDate?: string;
   }) => Promise<void>;
   onChangeMedicationDose?: (medId: string, newStrength: string, dosesPerDay: number, reason: string) => Promise<void>;
   onUpdateMedicationStatus?: (medId: string, status: MedicationStatus, reason?: string) => Promise<void>;
@@ -201,16 +206,22 @@ export function PaperPatientWorkspace({
   };
 
   // Derive latest clinical vitals dynamically from patient record
+  const isDemo = patient.id === 'p-tiffany' || patient.id === 'p-guide-001';
   const sortedVitals = [...vitals].sort(
     (a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime()
   );
-  const latestPulse = sortedVitals.find((v) => v.metric === 'pulse')?.value || '78';
-  const latestPressure = sortedVitals.find((v) => v.metric === 'pressure')?.value || '118/76';
-  const latestOxygen = sortedVitals.find((v) => v.metric === 'oxygen')?.value || '98';
-  const latestGlucose =
-    sortedVitals.find((v) => v.metric === 'glucose')?.value ||
-    labs.find((l) => l.testName.toLowerCase().includes('glucose'))?.value ||
-    '83';
+  const pulseObs = sortedVitals.find((v) => v.metric === 'pulse');
+  const pressureObs = sortedVitals.find((v) => v.metric === 'pressure');
+  const oxygenObs = sortedVitals.find((v) => v.metric === 'oxygen');
+  const glucoseObs =
+    sortedVitals.find((v) => v.metric === 'glucose') ||
+    labs.find((l) => l.testName.toLowerCase().includes('glucose'));
+
+  const latestPulse = pulseObs ? pulseObs.value : (isDemo ? '78' : '—');
+  const latestPressure = pressureObs ? pressureObs.value : (isDemo ? '118/76' : '—');
+  const latestOxygen = oxygenObs ? oxygenObs.value : (isDemo ? '98' : '—');
+  const latestGlucose = glucoseObs ? glucoseObs.value : (isDemo ? '83' : '—');
+  const hasTelemetry = Boolean(pulseObs || pressureObs || oxygenObs || glucoseObs || isDemo);
 
   const { day: recordDay, month: recordMonth } = parseRecordDayMonth(
     patient.lastVisitDate || careEvents[0]?.occurredAt
@@ -546,8 +557,10 @@ export function PaperPatientWorkspace({
                   <span className="text-[10px] font-medium text-[var(--color-ink-muted)] uppercase tracking-wider block">
                     {patient.sex}, {patient.age}
                   </span>
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--color-ink)] leading-snug mt-0.5 truncate">
-                    {patient.name}
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--color-ink)] leading-snug mt-0.5 truncate" title={patient.name}>
+                    <bdi dir="auto" className="block truncate text-start">
+                      {patient.name}
+                    </bdi>
                   </h2>
                   <span className="text-[10px] text-[var(--color-ink-muted)] font-mono block mt-0.5">
                     {patient.mrn}
@@ -662,10 +675,10 @@ export function PaperPatientWorkspace({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                    className="grid grid-cols-1 xl:grid-cols-12 gap-3 sm:gap-3.5 items-stretch h-full"
+                    className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-3.5 items-stretch h-full"
                   >
                     {/* Diagnosis & Clinical Impression Card (7 cols) */}
-                    <div className="xl:col-span-7 bg-[var(--color-surface-subtle)] rounded-[22px] p-3.5 sm:p-4 border border-white/60 shadow-xs flex flex-col justify-between gap-2 h-full">
+                    <div className="md:col-span-7 bg-[var(--color-surface-subtle)] rounded-[22px] p-3.5 sm:p-4 border border-white/60 shadow-xs flex flex-col justify-between gap-2 h-full">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5">
@@ -717,14 +730,20 @@ export function PaperPatientWorkspace({
                     </div>
 
                     {/* Live Vital Signs Panel (5 cols) */}
-                    <div className="xl:col-span-5 bg-[var(--color-surface-subtle)] rounded-[22px] p-3 sm:p-3.5 border border-white/60 shadow-xs flex flex-col justify-between gap-2 h-full">
+                    <div className="md:col-span-5 bg-[var(--color-surface-subtle)] rounded-[22px] p-3 sm:p-3.5 border border-white/60 shadow-xs flex flex-col justify-between gap-2 h-full">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-[var(--color-ink-muted)] uppercase tracking-wider">
                           Current Vital Signs
                         </span>
-                        <span className="flex items-center gap-1 text-[9.5px] font-semibold text-[var(--color-status-success)]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-status-success)] animate-pulse" />
-                          Telemetry Active
+                        <span className={clsx(
+                          'flex items-center gap-1 text-[9.5px] font-semibold',
+                          hasTelemetry ? 'text-[var(--color-status-success)]' : 'text-[var(--color-ink-muted)]'
+                        )}>
+                          <span className={clsx(
+                            'w-1.5 h-1.5 rounded-full',
+                            hasTelemetry ? 'bg-[var(--color-status-success)] animate-pulse' : 'bg-black/20'
+                          )} />
+                          {hasTelemetry ? 'Telemetry Active' : 'No Vitals Logged'}
                         </span>
                       </div>
 
@@ -738,7 +757,7 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestPulse}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">bpm</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">Normal sinus</span>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{pulseObs ? "Normal sinus" : (isDemo ? "Normal sinus" : "Not recorded")}</span>
                         </div>
 
                         <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
@@ -750,7 +769,7 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestPressure}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">mmHg</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">Normotensive</span>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{pressureObs ? "Normotensive" : (isDemo ? "Normotensive" : "Not recorded")}</span>
                         </div>
 
                         <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
@@ -762,7 +781,7 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestOxygen}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">%</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">Room air</span>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{oxygenObs ? "Room air" : (isDemo ? "Room air" : "Not recorded")}</span>
                         </div>
 
                         <div className="p-2 rounded-[12px] bg-[var(--color-surface-muted)] border border-white/40 flex flex-col justify-between">
@@ -774,7 +793,7 @@ export function PaperPatientWorkspace({
                             <span className="text-sm sm:text-base font-bold text-[var(--color-ink)] leading-none">{latestGlucose}</span>
                             <span className="text-[9px] font-medium text-[var(--color-ink-muted)]">mg/dL</span>
                           </div>
-                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">Fasting glycemia</span>
+                          <span className="text-[8px] text-[var(--color-ink-muted)] mt-0.5 truncate">{glucoseObs ? "Fasting glycemia" : (isDemo ? "Fasting glycemia" : "Not recorded")}</span>
                         </div>
                       </div>
                     </div>

@@ -28,10 +28,12 @@ import {
   ChevronRight,
   ShieldCheck,
   Activity,
+  Search,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { LabResult } from '@/data/types';
 import { RangeBar } from '@/components/cards/RangeBar';
+import { EGYPTIAN_LAB_CATALOG, LAB_CATEGORIES, findLabCatalogItem } from '@/data/labCatalog';
 import { OverlaySheet } from '@/components/overlays/OverlaySheet';
 import { en } from '@/i18n/en';
 
@@ -67,13 +69,17 @@ export function LabsTabView({
   const [selectedTestName, setSelectedTestName] = useState<string | null>(null);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
 
+  // Search filter for lab list
+  const [labSearchQuery, setLabSearchQuery] = useState('');
+
   // Record Lab Form State
-  const [newTestName, setNewTestName] = useState('Hemoglobin A1c');
+  const [newTestName, setNewTestName] = useState('Fasting Blood Glucose (FBS)');
   const [customTestName, setCustomTestName] = useState('');
+  const [newTestDate, setNewTestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newValue, setNewValue] = useState('');
-  const [newUnit, setNewUnit] = useState('%');
-  const [newRefLow, setNewRefLow] = useState('4.0');
-  const [newRefHigh, setNewRefHigh] = useState('5.6');
+  const [newUnit, setNewUnit] = useState('mg/dL');
+  const [newRefLow, setNewRefLow] = useState('70');
+  const [newRefHigh, setNewRefHigh] = useState('99');
   const [newStatus, setNewStatus] = useState<'normal' | 'borderline' | 'abnormal' | 'critical'>('normal');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -93,22 +99,37 @@ export function LabsTabView({
 
   const handlePresetChange = (name: string) => {
     setNewTestName(name);
-    const preset = standardPresets[name];
-    if (preset) {
+    if (name === 'Other / Custom Biomarker') {
+      setNewUnit('');
+      setNewRefLow('0');
+      setNewRefHigh('100');
+      return;
+    }
+    const catItem = findLabCatalogItem(name);
+    if (catItem) {
+      setNewUnit(catItem.defaultUnit);
+      setNewRefLow(String(catItem.referenceLow));
+      setNewRefHigh(String(catItem.referenceHigh));
+    } else if (standardPresets[name]) {
+      const preset = standardPresets[name];
       setNewUnit(preset.unit);
       setNewRefLow(String(preset.low));
       setNewRefHigh(String(preset.high));
     }
   };
 
-  // Filter labs
+  // Filter labs with status and search
   const filteredLabs = useMemo(() => {
-    if (filterStatus === 'all') return labs;
-    if (filterStatus === 'abnormal') return labs.filter((l) => l.status === 'abnormal' || l.status === 'critical');
-    if (filterStatus === 'normal') return labs.filter((l) => l.status === 'normal' || l.status === 'borderline');
-    if (filterStatus === 'unreviewed') return labs.filter((l) => !l.reviewedAt || !l.reviewedBy);
-    return labs;
-  }, [labs, filterStatus]);
+    let list = labs;
+    if (filterStatus === 'abnormal') list = list.filter((l) => l.status === 'abnormal' || l.status === 'critical');
+    if (filterStatus === 'normal') list = list.filter((l) => l.status === 'normal' || l.status === 'borderline');
+    if (filterStatus === 'unreviewed') list = list.filter((l) => !l.reviewedAt || !l.reviewedBy);
+    if (labSearchQuery.trim()) {
+      const q = labSearchQuery.toLowerCase();
+      list = list.filter((l) => l.testName.toLowerCase().includes(q) || String(l.value).toLowerCase().includes(q));
+    }
+    return list;
+  }, [labs, filterStatus, labSearchQuery]);
 
   // Group labs chronologically by Date
   const groupedLabs = useMemo(() => {
@@ -175,6 +196,8 @@ export function LabsTabView({
     setIsSubmitting(true);
     try {
       if (onRecordLab) {
+        // Parse date input
+        const labTimestamp = newTestDate ? new Date(newTestDate).toISOString() : new Date().toISOString();
         await onRecordLab({
           testName: finalName,
           value: newValue,
@@ -182,7 +205,7 @@ export function LabsTabView({
           referenceLow: newRefLow ? parseFloat(newRefLow) : undefined,
           referenceHigh: newRefHigh ? parseFloat(newRefHigh) : undefined,
           status: newStatus,
-          occurredAt: new Date().toISOString(),
+          occurredAt: labTimestamp,
         });
       }
       setIsRecordModalOpen(false);
@@ -250,6 +273,18 @@ export function LabsTabView({
           <span className="text-xs font-mono font-medium text-[var(--color-ink-muted)] px-2.5 py-1 rounded-full bg-white/60 border border-black/5 shadow-2xs">
             {filteredLabs.length} {dict.title}
           </span>
+
+          {/* Quick Search */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-[var(--color-ink-muted)] absolute start-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={labSearchQuery}
+              onChange={(e) => setLabSearchQuery(e.target.value)}
+              placeholder="Search labs (e.g. FBS, PPBS, Creatinine)..."
+              className="ps-8 pe-3 py-1 rounded-full bg-white border border-black/10 text-xs text-[var(--color-ink)] placeholder:text-[var(--color-ink-muted)] focus:outline-hidden focus:ring-1 focus:ring-[var(--color-ink)] w-48 sm:w-64"
+            />
+          </div>
         </div>
 
         {/* Primary Action Button */}
@@ -647,22 +682,49 @@ export function LabsTabView({
         className="max-w-md"
       >
         <form onSubmit={handleCreateLab} className="flex flex-col gap-4 p-4 sm:p-6 font-['Inter',sans-serif]">
-          {/* Test Preset Select */}
+          {/* Lab Test Date */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-[var(--color-ink)]">
-              {dict.testName}
+              Test Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={newTestDate}
+              onChange={(e) => setNewTestDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
+            />
+          </div>
+
+          {/* Test Preset Select with Egyptian Catalog */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-[var(--color-ink)]">
+              {dict.testName} (Egyptian Clinical Catalog)
             </label>
             <select
               value={newTestName}
               onChange={(e) => handlePresetChange(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 text-xs font-semibold text-[var(--color-ink)] focus:outline-hidden focus:ring-2 focus:ring-[var(--color-ink)]"
             >
-              {Object.keys(standardPresets).map((preset) => (
-                <option key={preset} value={preset}>
-                  {preset}
-                </option>
+              {LAB_CATEGORIES.map((category) => (
+                <optgroup key={category} label={category}>
+                  {EGYPTIAN_LAB_CATALOG.filter((c) => c.category === category).map((t) => (
+                    <option key={t.id} value={t.name}>
+                      {t.name} ({t.arabicName})
+                    </option>
+                  ))}
+                </optgroup>
               ))}
+              <optgroup label="Other">
+                <option value="Other / Custom Biomarker">Other / Custom Biomarker</option>
+              </optgroup>
             </select>
+          </div>
+
+          {/* Normal Range Reference Banner */}
+          <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/60 text-xs text-emerald-950 flex items-center justify-between">
+            <span className="font-semibold text-emerald-900">Standard Normal Range</span>
+            <span className="font-mono font-bold text-emerald-800">{newRefLow} – {newRefHigh} {newUnit}</span>
           </div>
 
           {newTestName === 'Other / Custom Biomarker' && (

@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as d3 from 'd3';
-import { Plus, X, ArrowRight, Layers } from 'lucide-react';
+import { Plus, X, ArrowRight, Layers, Calendar } from 'lucide-react';
 import type { CareEvent } from '@/data/types';
 import { MetricCard } from '../cards/MetricCard';
 import { MedicationChip } from '../cards/MedicationChip';
@@ -119,7 +119,7 @@ export function InteractiveTimeline({
 
   const allowedKinds = new Set(activeFilters.flatMap((f) => filterMap[f] || []));
   const isVisible = (k: CareEvent['kind']) => allowedKinds.size === 0 || allowedKinds.has(k);
-  const source = careEvents.length ? careEvents : fallback;
+  const source = careEvents;
   const events = source.filter((e) => isVisible(e.kind));
 
   const allDates = events.map((e) => parseDate(e.occurredAt).getTime());
@@ -138,6 +138,29 @@ export function InteractiveTimeline({
     setViewEnd(fullMax);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundsKey]);
+
+  if (careEvents.length === 0) {
+    return (
+      <div className="relative w-full rounded-[22px] bg-white border border-[var(--color-border-grid)] p-8 text-center flex flex-col items-center justify-center min-h-[220px]">
+        <div className="w-10 h-10 rounded-full bg-[var(--color-surface-subtle)] flex items-center justify-center text-[var(--color-ink-muted)] mb-2 shadow-xs">
+          <Calendar className="w-5 h-5 text-[var(--color-ink-muted)]" />
+        </div>
+        <h4 className="text-sm font-bold text-[var(--color-ink)]">No Care Timeline Events Yet</h4>
+        <p className="text-xs text-[var(--color-ink-muted)] max-w-md mt-1 leading-relaxed">
+          Events will appear automatically along this timeline as visits, medications, labs, and vitals are recorded for this patient.
+        </p>
+        {onAddEntry && (
+          <button
+            type="button"
+            onClick={onAddEntry}
+            className="mt-3 px-3.5 py-1.5 rounded-full bg-[var(--color-ink)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+          >
+            + Add First Entry
+          </button>
+        )}
+      </div>
+    );
+  }
 
   useEffect(() => {
     const el = containerRef.current;

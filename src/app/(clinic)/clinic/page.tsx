@@ -58,6 +58,12 @@ export default function ClinicHomePage() {
   const [locale, setLocale] = useState<Locale>('en');
   const dict = getDictionary(locale);
 
+  // Neon Auth Session (Google OAuth user info)
+  const { data: session } = authClient.useSession();
+  const sessionUser = session?.user;
+  const doctorDisplayName = sessionUser?.name || sessionUser?.email?.split('@')[0] || dict.doctorMenu.doctorName;
+  const doctorAvatarUrl = sessionUser?.image;
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState<ClinicStats>({
@@ -245,14 +251,18 @@ export default function ClinicHomePage() {
                 <button
                   type="button"
                   onClick={() => setIsDoctorMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-2 px-2.5 py-1 rounded-[var(--radius-pill)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/20 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-white)] transition-colors select-none"
+                  className="flex items-center gap-2 px-2.5 py-1 rounded-[var(--radius-pill)] bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/20 text-xs font-semibold text-[var(--color-ink)] hover:bg-[var(--color-white)] transition-colors select-none cursor-pointer"
                   aria-haspopup="true"
                   aria-expanded={isDoctorMenuOpen}
                 >
-                  <div className="w-6 h-6 rounded-full bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 flex items-center justify-center font-bold text-[10px] text-[var(--color-ink)] shrink-0">
-                    <User className="w-3.5 h-3.5" />
+                  <div className="w-6 h-6 rounded-full overflow-hidden bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 flex items-center justify-center font-bold text-[10px] text-[var(--color-ink)] shrink-0">
+                    {doctorAvatarUrl ? (
+                      <img src={doctorAvatarUrl} alt={doctorDisplayName} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-3.5 h-3.5 text-[var(--color-ink)]" />
+                    )}
                   </div>
-                  <span className="hidden sm:inline font-bold">{dict.doctorMenu.doctorName}</span>
+                  <span className="hidden sm:inline font-bold truncate max-w-[120px]">{doctorDisplayName}</span>
                   <ChevronDown className={`w-3 h-3 text-[var(--color-ink-muted)] transition-transform ${isDoctorMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -265,9 +275,20 @@ export default function ClinicHomePage() {
                   ariaLabel={dict.doctorMenu.doctorName}
                   className="w-48 rounded-xl bg-[var(--color-white)] border border-[var(--color-ink-soft)]/30 shadow-lg py-1.5 text-xs"
                 >
-                    <div className="px-3 py-1.5 border-b border-[var(--color-ink-soft)]/20 sm:hidden">
-                      <span className="font-bold text-[var(--color-ink)] block">{dict.doctorMenu.doctorName}</span>
-                      <span className="text-[10px] text-[var(--color-ink-muted)]">{dict.roles.doctor}</span>
+                    <div className="px-3 py-2 border-b border-[var(--color-ink-soft)]/20">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full overflow-hidden bg-[var(--color-surface)] border border-[var(--color-ink-soft)]/30 flex items-center justify-center shrink-0">
+                          {doctorAvatarUrl ? (
+                            <img src={doctorAvatarUrl} alt={doctorDisplayName} className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-3.5 h-3.5 text-[var(--color-ink-muted)]" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold text-[var(--color-ink)] block truncate text-xs">{doctorDisplayName}</span>
+                          <span className="text-[10px] text-[var(--color-ink-muted)] block truncate">{sessionUser?.email || dict.roles.doctor}</span>
+                        </div>
+                      </div>
                     </div>
 
                     <button

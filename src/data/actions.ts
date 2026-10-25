@@ -61,6 +61,7 @@ import type {
   RecordKind,
   ProvenanceSource,
   Medication,
+  ActiveIngredient,
   MedicationEvent,
   MedicationStatus,
   Visit,
@@ -325,7 +326,9 @@ export async function fetchPatientMedicationEventsAction(patientId: string): Pro
 export async function createMedicationAction(input: {
   patientId: string;
   name: string;
+  tradeName?: string;
   strength: string;
+  activeIngredients?: ActiveIngredient[];
   dosesPerDay?: number;
   route?: string;
   instructions?: string;
