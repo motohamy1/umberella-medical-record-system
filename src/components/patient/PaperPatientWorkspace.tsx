@@ -1180,15 +1180,21 @@ export function PaperPatientWorkspace({
                   Heart Rate
                 </span>
                 <span className="text-sm font-semibold text-[var(--color-ink)]">
-                  {latestPulse} bpm
+                  {latestPulse !== '—' ? `${latestPulse} bpm` : 'Not recorded'}
                 </span>
               </div>
 
               {/* Peak Reading Callout */}
-              <div className="px-3 py-1 rounded-full bg-white text-[var(--color-ink)] text-xs font-bold shadow-lift flex items-center gap-1.5 border border-black/5 animate-pulse">
-                <span className="text-sm font-extrabold">{Math.max(120, parseInt(latestPulse, 10) + 12)}</span>
-                <span className="text-[10px] text-[var(--color-ink-muted)]">bpm peak</span>
-              </div>
+              {latestPulse !== '—' && !isNaN(parseInt(latestPulse, 10)) ? (
+                <div className="px-3 py-1 rounded-full bg-white text-[var(--color-ink)] text-xs font-bold shadow-lift flex items-center gap-1.5 border border-black/5 animate-pulse">
+                  <span className="text-sm font-extrabold">{Math.max(120, parseInt(latestPulse, 10) + 12)}</span>
+                  <span className="text-[10px] text-[var(--color-ink-muted)]">bpm peak</span>
+                </div>
+              ) : (
+                <div className="px-2.5 py-1 rounded-full bg-white text-[var(--color-ink-muted)] text-[11px] font-medium border border-black/5 flex items-center gap-1">
+                  <span>No telemetry</span>
+                </div>
+              )}
             </div>
 
             {/* Smooth Sine/ECG Waveform Canvas */}
