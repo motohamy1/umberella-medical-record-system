@@ -141,8 +141,8 @@ export function PrescriptionOCRModal({
         const origin = window.location.origin;
         const mobileUrl = `${origin}/clinic/ocr-mobile?session=${newSession}&patientId=${patientId}`;
         QRCode.toDataURL(mobileUrl, { width: 220, margin: 1 })
-          .then((url) => setQrCodeDataUrl(url))
-          .catch((err) => console.error('Failed to generate QR:', err));
+          .then((url: string) => setQrCodeDataUrl(url))
+          .catch((err: unknown) => console.error('Failed to generate QR:', err));
       }
     } else {
       stopCamera();
