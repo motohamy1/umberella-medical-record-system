@@ -281,8 +281,32 @@ export async function getTimeline(
   to?: string,
   kinds?: RecordKind[]
 ): Promise<TimelineData> {
-  const store = readStore();
-  const allEvents = (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
+  let allEvents: CareEvent[] = [];
+  const sql = getDb();
+  if (sql) {
+    try {
+      const rows = (await (sql as any).query(
+        `SELECT id, org_id as "orgId", patient_id as "patientId", kind, occurred_at as "occurredAt", ended_at as "endedAt", visit_id as "visitId", source_table as "sourceTable", source_id as "sourceId", label, summary, source, created_by as "createdBy", verified_by as "verifiedBy", verified_at as "verifiedAt"
+         FROM care_events
+         WHERE patient_id = $1 AND deleted_at IS NULL
+         ORDER BY occurred_at DESC`,
+        [patientId]
+      )) as any[];
+      if (rows && rows.length > 0) {
+        allEvents = rows.map((r) => ({
+          ...r,
+          occurredAt: toISO(r.occurredAt),
+          endedAt: toISOOrNull(r.endedAt),
+        }));
+      }
+    } catch (err) {
+      console.warn('Neon query care_events (timeline) failed, fallback to store:', err);
+    }
+  }
+  if (allEvents.length === 0) {
+    const store = readStore();
+    allEvents = (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
+  }
 
   // Filter kinds
   const filteredEvents = kinds && kinds.length > 0
@@ -490,6 +514,32 @@ export async function getPatientCareEvents(patientId: string): Promise<CareEvent
 }
 
 export async function getPatientVitals(patientId: string): Promise<VitalObservation[]> {
+  const sql = getDb();
+  if (sql) {
+    try {
+      const rows = (await (sql as any).query(
+        `SELECT * FROM vital_observations WHERE patient_id = $1 AND deleted_at IS NULL ORDER BY measured_at DESC`,
+        [patientId]
+      )) as any[];
+      if (rows && rows.length > 0) {
+        return rows.map((r) => ({
+          id: r.id,
+          orgId: r.org_id,
+          patientId: r.patient_id,
+          visitId: r.visit_id,
+          metric: r.metric,
+          value: r.value,
+          unit: r.unit,
+          measuredAt: toISO(r.measured_at),
+          source: r.source,
+          createdBy: r.created_by,
+          verifiedBy: r.verified_by,
+        }));
+      }
+    } catch (err) {
+      console.warn('Neon query vitals failed, fallback to store:', err);
+    }
+  }
   const store = readStore();
   return (store.vitals || []).filter((v: VitalObservation) => v.patientId === patientId);
 }
