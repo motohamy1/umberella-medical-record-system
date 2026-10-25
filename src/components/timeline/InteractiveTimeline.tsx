@@ -320,7 +320,7 @@ export function InteractiveTimeline({
       if (!parent) {
         for (const m of milestones) {
           const mt = parseDate(m.occurredAt).getTime();
-          if (mt <= t && t - mt <= 14 * DAY && (!parent || mt > parseDate(parent.occurredAt).getTime())) {
+          if (Math.abs(t - mt) <= 14 * DAY && (!parent || Math.abs(t - mt) < Math.abs(t - parseDate(parent.occurredAt).getTime()))) {
             parent = m;
           }
         }
@@ -349,7 +349,8 @@ export function InteractiveTimeline({
   milestones.forEach((m) => {
     const groups = new Map<string, CareEvent[]>();
     (childrenByMilestone.get(m.id) || []).forEach((e) => {
-      const key = `${e.kind}::${e.label}`;
+      const dayKey = e.occurredAt ? e.occurredAt.slice(0, 10) : 'unknown';
+    const key = `${dayKey}::${e.kind}::${e.label}`;
       groups.set(key, [...(groups.get(key) || []), e]);
     });
     let li = 0;
@@ -385,7 +386,7 @@ export function InteractiveTimeline({
       count: arr.length,
       ids: arr.map((a) => a.id),
       lane: orphanLi++,
-      parent: 'axis',
+      parent: 'axis-' + first.id,
       events: arr,
     });
   });
@@ -418,12 +419,13 @@ export function InteractiveTimeline({
   }
 
   const laid = (() => {
-    const parentX = new Map(
+    const parentX = new Map<string, number>(
       milestones.map((m) => {
         const cl = clusterOfMilestone.get(m.id);
         return [m.id, cl ? cl.cx : tx(parseDate(m.occurredAt))] as const;
       })
     );
+    childNodes.filter((c) => c.parent.startsWith("axis")).forEach((c) => { parentX.set(c.parent, tx(c.date)); });
 
     const childrenByParent = new Map<string, ChildNode[]>();
     for (const c of childNodes) {
@@ -452,15 +454,15 @@ export function InteractiveTimeline({
     };
 
     const sortedParents = Array.from(childrenByParent.keys()).sort((a, b) => {
-      const xa = a === 'axis' ? (childrenByParent.get(a)?.[0] ? tx(childrenByParent.get(a)![0].date) : 0) : (parentX.get(a) ?? 0);
-      const xb = b === 'axis' ? (childrenByParent.get(b)?.[0] ? tx(childrenByParent.get(b)![0].date) : 0) : (parentX.get(b) ?? 0);
+      const xa = parentX.get(a) ?? (childrenByParent.get(a)?.[0] ? tx(childrenByParent.get(a)![0].date) : 0);
+      const xb = parentX.get(b) ?? (childrenByParent.get(b)?.[0] ? tx(childrenByParent.get(b)![0].date) : 0);
       return xa - xb;
     });
 
     for (const pid of sortedParents) {
       const nodes = childrenByParent.get(pid) || [];
-      const isAxis = pid === 'axis';
-      const px = isAxis ? (nodes[0] ? tx(nodes[0].date) : 60) : (parentX.get(pid) ?? 60);
+      const isAxis = pid.startsWith('axis');
+      const px = parentX.get(pid) ?? (nodes[0] ? tx(nodes[0].date) : 60);
 
       const maxLw = Math.max(...nodes.map((n) => labelW(n.label)), 60);
       const flip = px + 24 + maxLw + 32 > width - 16 && px - 24 - maxLw - 32 > 16;
@@ -688,7 +690,7 @@ export function InteractiveTimeline({
               if (!p) return null;
               let mx = p.x;
               let my = AXIS_Y;
-              if (c.parent !== 'axis') {
+              if (!c.parent.startsWith('axis')) {
                 const pm = milestones.find((m) => m.id === c.parent);
                 if (!pm) return null;
                 const cl = clusterOfMilestone.get(pm.id);
@@ -705,7 +707,7 @@ export function InteractiveTimeline({
                   stroke="var(--color-border-hairline)"
                   strokeWidth={1.2}
                   strokeLinecap="round"
-                  strokeDasharray={c.parent === 'axis' ? '2 2' : undefined}
+                  strokeDasharray={c.parent.startsWith('axis') ? '2 2' : undefined}
                 />
               );
             })}
@@ -734,14 +736,14 @@ export function InteractiveTimeline({
         )}
 
         {/* axis anchor marks for standalone/orphan nodes */}
-        {showChildren && childNodes.filter((c) => c.parent === 'axis').map((c) => {
+        {showChildren && childNodes.filter((c) => c.parent.startsWith('axis')).map((c) => {
           const p = laid.pos.get(c.id);
           if (!p) return null;
           return (
             <div
               key={`anchor-${c.id}`}
               className="absolute w-2 h-2 rounded-full bg-[var(--color-ink-muted)] -translate-x-1/2 -translate-y-1/2 z-10"
-              style={{ left: p.x, top: AXIS_Y }}
+              style={{ left: tx(c.date), top: AXIS_Y }}
             />
           );
         })}
