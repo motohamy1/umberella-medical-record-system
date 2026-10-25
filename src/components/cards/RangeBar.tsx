@@ -15,14 +15,20 @@ export interface RangeBarProps {
   label?: string;
   value: number | string;
   unit?: string;
-  min?: number;
-  max?: number;
-  lowThreshold?: number;
-  highThreshold?: number;
-  referenceLow?: number;
-  referenceHigh?: number;
+  min?: number | string | null;
+  max?: number | string | null;
+  lowThreshold?: number | string | null;
+  highThreshold?: number | string | null;
+  referenceLow?: number | string | null;
+  referenceHigh?: number | string | null;
   showLabels?: boolean;
   className?: string;
+}
+
+function parseNum(val: unknown, fallback: number): number {
+  if (val === undefined || val === null || val === '') return fallback;
+  const n = typeof val === 'number' ? val : parseFloat(String(val));
+  return Number.isFinite(n) ? n : fallback;
 }
 
 export function RangeBar({
@@ -38,15 +44,15 @@ export function RangeBar({
   showLabels = true,
   className,
 }: RangeBarProps) {
-  const numericValue = typeof value === 'string' ? parseFloat(value) || 0 : value;
+  const numericValue = parseNum(value, 0);
 
-  // Resolve thresholds
-  const low = lowThreshold !== undefined ? lowThreshold : referenceLow !== undefined ? referenceLow : 0;
-  const high = highThreshold !== undefined ? highThreshold : referenceHigh !== undefined ? referenceHigh : 100;
+  // Resolve thresholds strictly as numbers
+  const low = parseNum(lowThreshold ?? referenceLow, 0);
+  const high = parseNum(highThreshold ?? referenceHigh, 100);
 
   // Resolve min and max bounds with sensible visual padding
-  const autoMin = min !== undefined ? min : Math.max(0, Math.floor(low - (high - low) * 0.4));
-  const autoMax = max !== undefined ? max : Math.ceil(high + (high - low) * 0.4);
+  const autoMin = min !== undefined && min !== null ? parseNum(min, 0) : Math.max(0, Math.floor(low - Math.max(0, high - low) * 0.4));
+  const autoMax = max !== undefined && max !== null ? parseNum(max, 100) : Math.ceil(high + Math.max(1, high - low) * 0.4);
 
   const span = autoMax - autoMin > 0 ? autoMax - autoMin : 1;
 
@@ -55,7 +61,7 @@ export function RangeBar({
   const percent = ((clampedValue - autoMin) / span) * 100;
 
   // 5 Zones: Low, Borderline Low, Normal Target, Borderline High, High
-  const normalRange = high - low;
+  const normalRange = Math.max(0, high - low);
   const borderlineWidth = normalRange * 0.15;
 
   const lowBound = low;
@@ -71,6 +77,10 @@ export function RangeBar({
   const isLow = numericValue < low;
   const isHigh = numericValue > high;
   const isBorderline = (numericValue >= low && numericValue < borderlineLowBound) || (numericValue > borderlineHighBound && numericValue <= high);
+
+  const formatBound = (num: number) => {
+    return Number.isFinite(num) ? num.toFixed(1) : '0.0';
+  };
 
   return (
     <div className={clsx('flex flex-col gap-1 py-1 w-full font-[\'Inter\',sans-serif]', className)}>
@@ -107,19 +117,19 @@ export function RangeBar({
         <div
           style={{ width: `${Math.max(0, borderlineLowPercent - lowPercent)}%` }}
           className="h-full bg-amber-400/30"
-          title={`Borderline Low (${low} - ${borderlineLowBound.toFixed(1)})`}
+          title={`Borderline Low (${low} - ${formatBound(borderlineLowBound)})`}
         />
         {/* 3. Normal Target zone */}
         <div
           style={{ width: `${Math.max(0, borderlineHighPercent - borderlineLowPercent)}%` }}
           className="h-full bg-emerald-500/35 border-x border-white/60"
-          title={`Normal Target (${borderlineLowBound.toFixed(1)} - ${borderlineHighBound.toFixed(1)})`}
+          title={`Normal Target (${formatBound(borderlineLowBound)} - ${formatBound(borderlineHighBound)})`}
         />
         {/* 4. Borderline High zone */}
         <div
           style={{ width: `${Math.max(0, highPercent - borderlineHighPercent)}%` }}
           className="h-full bg-amber-400/30"
-          title={`Borderline High (${borderlineHighBound.toFixed(1)} - ${high})`}
+          title={`Borderline High (${formatBound(borderlineHighBound)} - ${high})`}
         />
         {/* 5. High zone */}
         <div

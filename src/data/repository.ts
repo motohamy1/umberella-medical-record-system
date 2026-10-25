@@ -371,10 +371,9 @@ export async function createPatient(input: CreatePatientInput): Promise<Patient>
   const nowIso = new Date().toISOString();
   const todayFormatted = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  // Derive approximate date of birth if omitted
-  const birthYear = new Date().getFullYear() - (input.age || 30);
-  const safeDob = input.dateOfBirth && input.dateOfBirth.trim() ? input.dateOfBirth : `${birthYear}-01-01`;
-  const safePhone = input.phone && input.phone.trim() ? input.phone : 'Not provided';
+  // Date of birth optional; store empty string when not provided (age is the required field)
+  const safeDob = input.dateOfBirth && input.dateOfBirth.trim() ? input.dateOfBirth : '';
+  const safePhone = input.phone && input.phone.trim() ? input.phone : '';
   const safeConcern = input.primaryConcern && input.primaryConcern.trim() ? input.primaryConcern : 'Clinical Evaluation';
 
   const newPatient: Patient = {
@@ -388,8 +387,8 @@ export async function createPatient(input: CreatePatientInput): Promise<Patient>
     phone: safePhone,
     status: (input.status || 'New') as PatientStatus,
     primaryConcern: safeConcern,
-    socialHistory: input.socialHistory || 'Not recorded',
-    carePlan: input.carePlan || 'Standard Clinical Observation',
+    socialHistory: input.socialHistory || '',
+    carePlan: input.carePlan || '',
     lastVisitDate: todayFormatted,
     createdAt: nowIso,
     updatedAt: nowIso,
@@ -695,8 +694,8 @@ export async function getPatientLabs(patientId: string): Promise<LabResult[]> {
           testName: r.test_name,
           value: r.value,
           unit: r.unit,
-          referenceLow: r.reference_low,
-          referenceHigh: r.reference_high,
+          referenceLow: r.reference_low != null ? Number(r.reference_low) : undefined,
+          referenceHigh: r.reference_high != null ? Number(r.reference_high) : undefined,
           status: r.status,
           occurredAt: toISO(r.occurred_at),
           reviewedBy: r.reviewed_by,
@@ -938,6 +937,7 @@ export async function createMedication(input: {
     createdBy: input.createdBy || 'Dr. Tarek',
   };
   store.medicationEvents = [medEvent, ...(store.medicationEvents || [])];
+  writeStore(store);
 
   // Project onto timeline care_events and persist
   await createCareEvent({
@@ -952,7 +952,6 @@ export async function createMedication(input: {
     createdBy: input.createdBy || 'Dr. Tarek',
   });
 
-  writeStore(store);
   return newMed;
 }
 

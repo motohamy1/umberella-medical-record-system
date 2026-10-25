@@ -103,17 +103,19 @@ export function MedicationsTabView({
   // Form states: Stop
   const [stopReason, setStopReason] = useState('');
 
-  // Split medications into current and history
+  // Split medications into current and history, sorted chronologically (newest first)
   const currentMeds = useMemo(() => {
-    return medications.filter(
-      (m) => m.status === 'active' || m.status === 'paused'
-    );
+    return medications
+      .filter((m) => m.status === 'active' || m.status === 'paused')
+      .slice()
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
   }, [medications]);
 
   const historyMeds = useMemo(() => {
-    return medications.filter(
-      (m) => m.status === 'stopped' || m.status === 'completed'
-    );
+    return medications
+      .filter((m) => m.status === 'stopped' || m.status === 'completed')
+      .slice()
+      .sort((a, b) => new Date(b.endDate || b.startDate).getTime() - new Date(a.endDate || a.startDate).getTime());
   }, [medications]);
 
   // Helper date formatter

@@ -13,6 +13,7 @@ import {
   getPatientLabs,
   sendPatientInvite,
   createCareEvent,
+  createVital,
   getPatientMedications,
   getPatientMedicationEvents,
   createMedication,
@@ -181,6 +182,24 @@ export async function fetchPatientEventsAction(patientId: string): Promise<CareE
 
 export async function fetchPatientVitalsAction(patientId: string): Promise<VitalObservation[]> {
   return getPatientVitals(patientId);
+}
+
+export async function createVitalAction(input: {
+  patientId: string;
+  visitId?: string | null;
+  metric: 'pulse' | 'pressure' | 'oxygen' | 'temp' | 'glucose' | 'weight' | 'mood' | string;
+  value: string;
+  unit: string;
+  measuredAt?: string;
+  source?: ProvenanceSource;
+  createdBy?: string;
+}): Promise<ActionState<VitalObservation>> {
+  try {
+    const created = await createVital(input);
+    return { success: true, data: created };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export async function fetchPatientAllergiesAction(patientId: string): Promise<Allergy[]> {

@@ -557,8 +557,8 @@ export function PaperPatientWorkspace({
                   <span className="text-[10px] font-medium text-[var(--color-ink-muted)] uppercase tracking-wider block">
                     {patient.sex}, {patient.age}
                   </span>
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--color-ink)] leading-snug mt-0.5 truncate" title={patient.name}>
-                    <bdi dir="auto" className="block truncate text-start">
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--color-ink)] leading-snug mt-0.5 break-words" title={patient.name}>
+                    <bdi dir="auto" className="block break-words text-start">
                       {patient.name}
                     </bdi>
                   </h2>
@@ -589,7 +589,7 @@ export function PaperPatientWorkspace({
                     Social History:
                   </span>
                   <span className="text-xs font-semibold text-[var(--color-ink)] block truncate">
-                    {patient.socialHistory || 'Non-smoker, active lifestyle'}
+                    {patient.socialHistory || 'Not recorded'}
                   </span>
                 </div>
                 <button
@@ -609,7 +609,7 @@ export function PaperPatientWorkspace({
                     Care Plan:
                   </span>
                   <span className="text-xs font-semibold text-[var(--color-ink)] block truncate">
-                    {patient.carePlan || 'Standard Clinical Protocol'}
+                    {patient.carePlan || 'Not recorded'}
                   </span>
                 </div>
                 <button
@@ -1605,7 +1605,7 @@ export function PaperPatientWorkspace({
           <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-200">
             <div>
               <span className="text-[10px] text-[var(--color-ink-muted)] uppercase font-semibold block">Total Events</span>
-              <span className="text-sm font-bold text-[var(--color-ink)]">{careEvents.length || 8} entries logged</span>
+              <span className="text-sm font-bold text-[var(--color-ink)]">{careEvents.length} entries logged</span>
             </div>
             <div className="text-right">
               <span className="text-[10px] text-[var(--color-ink-muted)] uppercase font-semibold block">Latest Encounter</span>
@@ -1615,11 +1615,15 @@ export function PaperPatientWorkspace({
 
           {/* Event List */}
           <div className="max-h-[380px] overflow-y-auto space-y-2 pr-1">
-            {(careEvents.length > 0 ? careEvents : Object.values(timelineEventsMap)).map((event, idx) => {
-              const title = 'label' in event ? event.label : event.title;
-              const summary = 'summary' in event ? event.summary : event.details;
-              const date = 'occurredAt' in event ? event.occurredAt : event.date;
-              const kind = 'kind' in event ? event.kind : event.category;
+            {careEvents.length === 0 ? (
+              <div className="p-6 text-center text-xs text-[var(--color-ink-muted)]">
+                No clinical events recorded yet. Use "New Entry" to add the first record.
+              </div>
+            ) : careEvents.map((event, idx) => {
+              const title = event.label;
+              const summary = event.summary;
+              const date = event.occurredAt;
+              const kind = event.kind;
 
               return (
                 <div
