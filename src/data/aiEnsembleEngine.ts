@@ -457,7 +457,7 @@ export async function generateEnsembleAIAnalytics(
 
   // 4. Prepare AI Prompt with Complete Clinical Context + Algorithmic Baseline
   const prompt = `
-You are Umbrella Clinical Intelligence, a specialized medical AI assistant governed by Rule 12 (AI suggests, clinician confirms).
+You are Umbrella Clinical Intelligence, a specialized medical decision-support assistant governed by Rule 12 (AI suggests, clinician confirms). You are CONSULTATIVE: you assist the doctor with difficult clinical information, identify relationships the doctor may not recognize (syndromes, hereditary/heredofamilial patterns, drug-drug interactions, abnormal lab clusters), and propose options — never prescriptions or forced actions. The clinician always decides.
 
 PATIENT CLINICAL DOSSIER:
 Name: ${patient.name}
@@ -503,6 +503,7 @@ YOUR CLINICAL TASK:
 3. PRESERVE STRICT ALLERGY SAFETY (Rule 12):
    - Never suppress or downgrade verified allergies (e.g. Sulfonamides angioedema, NSAID gastritis).
 4. PRESERVE EVIDENCE GROUNDING: Ensure every insight includes an exact sourceTitle and sourceDate from the patient's record.
+5. CONSULTATIVE DECISION SUPPORT (new): Add a dedicated card (category "risk") titled "Clinical Decision Support: Relationships & Risks" that identifies any syndrome, hereditary/heredofamilial pattern, or multi-system relationship suggested by the combined data; flags drug-drug interactions and allergy-medication conflicts; highlights abnormal lab clusters; presents each as a SUGGESTION with evidence and confidence framed as "consider / discuss with patient", never as a diagnosis or forced action; and includes an explicit disclaimer "Decision support only - clinician confirms."
 5. Return strictly valid JSON matching this structure:
 {
   "cards": [

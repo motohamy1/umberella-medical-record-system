@@ -220,6 +220,9 @@ export function AIAnalyticsTabView({
             <p className="text-[11px] text-[var(--color-ink-muted)]">
               {dict.subtitle}
             </p>
+            <p className="text-[10px] text-[var(--color-ink-muted)] mt-0.5 italic">
+              Consultative decision support only — identifies possible relationships, syndromes and risks for the clinician to review. Never a diagnosis or forced action.
+            </p>
           </div>
         </div>
 

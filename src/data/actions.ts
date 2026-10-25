@@ -832,6 +832,9 @@ export async function recordPatientMedicationTakenAction(input: {
 export async function processPrescriptionOCRAction(params: {
   patientId: string;
   sampleId?: string;
+  imageDataUri?: string;
+  imageFileName?: string;
+  customText?: string;
   consentObtained: boolean;
 }): Promise<ActionState<PrescriptionScanResult>> {
   try {
