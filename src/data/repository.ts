@@ -281,32 +281,7 @@ export async function getTimeline(
   to?: string,
   kinds?: RecordKind[]
 ): Promise<TimelineData> {
-  let allEvents: CareEvent[] = [];
-  const sql = getDb();
-  if (sql) {
-    try {
-      const rows = (await (sql as any).query(
-        `SELECT id, org_id as "orgId", patient_id as "patientId", kind, occurred_at as "occurredAt", ended_at as "endedAt", visit_id as "visitId", source_table as "sourceTable", source_id as "sourceId", label, summary, source, created_by as "createdBy", verified_by as "verifiedBy", verified_at as "verifiedAt"
-         FROM care_events
-         WHERE patient_id = $1 AND deleted_at IS NULL
-         ORDER BY occurred_at DESC`,
-        [patientId]
-      )) as any[];
-      if (rows && rows.length > 0) {
-        allEvents = rows.map((r) => ({
-          ...r,
-          occurredAt: toISO(r.occurredAt),
-          endedAt: toISOOrNull(r.endedAt),
-        }));
-      }
-    } catch (err) {
-      console.warn('Neon query care_events (timeline) failed, fallback to store:', err);
-    }
-  }
-  if (allEvents.length === 0) {
-    const store = readStore();
-    allEvents = (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
-  }
+  const allEvents = await getPatientCareEvents(patientId);
 
   // Filter kinds
   const filteredEvents = kinds && kinds.length > 0
@@ -488,18 +463,19 @@ export async function deletePatient(id: string): Promise<boolean> {
 }
 
 export async function getPatientCareEvents(patientId: string): Promise<CareEvent[]> {
+  let careEvents: CareEvent[] = [];
   const sql = getDb();
   if (sql) {
     try {
       const rows = (await (sql as any).query(
-        `SELECT id, org_id as "orgId", patient_id as "patientId", kind, occurred_at as "occurredAt", ended_at as "endedAt", visit_id as "visitId", source_table as "sourceTable", source_id as "sourceId", label, summary, source, created_by as "createdBy", verified_by as "verifiedBy", verified_at as "verifiedAt"
+        `SELECT id, org_id as "orgId", patient_id as "patientId", kind, occurred_at as "occurredAt", ended_at as "endedAt", visit_id as "visitId", source_table as "sourceTable", source_id as "sourceId", label, summary, source, created_by as "createdBy"
          FROM care_events
          WHERE patient_id = $1 AND deleted_at IS NULL
          ORDER BY occurred_at DESC`,
         [patientId]
       )) as any[];
       if (rows && rows.length > 0) {
-        return rows.map((r) => ({
+        careEvents = rows.map((r) => ({
           ...r,
           occurredAt: toISO(r.occurredAt),
           endedAt: toISOOrNull(r.endedAt),
@@ -509,8 +485,70 @@ export async function getPatientCareEvents(patientId: string): Promise<CareEvent
       console.warn('Neon query care_events failed, fallback to store:', err);
     }
   }
-  const store = readStore();
-  return (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
+  if (careEvents.length === 0) {
+    const store = readStore();
+    careEvents = (store.careEvents || []).filter((ce: CareEvent) => ce.patientId === patientId);
+  }
+
+  // Synthesize missing events from medications and labs so timeline is always comprehensive
+  const existingSourceIds = new Set(careEvents.map((e) => e.sourceId).filter(Boolean));
+  const existingKeys = new Set(careEvents.map((e) => `${e.kind}::${e.label}::${e.occurredAt ? e.occurredAt.slice(0, 10) : ''}`));
+
+  try {
+    const meds = await getPatientMedications(patientId);
+    for (const m of meds) {
+      const label = `Start: ${m.tradeName || m.name} ${m.strength}`;
+      const dateKey = m.startDate ? m.startDate.slice(0, 10) : '';
+      const key = `medication::${label}::${dateKey}`;
+      if (!existingSourceIds.has(m.id) && !existingKeys.has(key)) {
+        careEvents.push({
+          id: `ce-med-${m.id}`,
+          orgId: m.orgId,
+          patientId: m.patientId,
+          kind: 'medication',
+          label,
+          summary: `${m.tradeName || m.name} ${m.strength} (${m.dosesPerDay || 1}x daily, ${m.route || 'Oral'})${m.instructions ? ` • ${m.instructions}` : ''}`,
+          occurredAt: m.startDate || m.createdAt || new Date().toISOString(),
+          sourceTable: 'medications',
+          sourceId: m.id,
+          source: m.source || 'doctor',
+          createdBy: m.createdBy || 'Dr. Tarek',
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to synthesize meds for care_events:', err);
+  }
+
+  try {
+    const labs = await getPatientLabs(patientId);
+    for (const l of labs) {
+      const label = `Lab Result: ${l.testName} ${l.value} ${l.unit}`;
+      const dateKey = l.occurredAt ? l.occurredAt.slice(0, 10) : '';
+      const key = `lab::${label}::${dateKey}`;
+      if (!existingSourceIds.has(l.id) && !existingKeys.has(key)) {
+        careEvents.push({
+          id: `ce-lab-${l.id}`,
+          orgId: l.orgId,
+          patientId: l.patientId,
+          kind: 'lab',
+          label,
+          summary: `Recorded ${l.testName} (${l.status}) - Ref: ${l.referenceLow ?? '-'}-${l.referenceHigh ?? '-'} ${l.unit}`,
+          occurredAt: l.occurredAt || new Date().toISOString(),
+          sourceTable: 'lab_results',
+          sourceId: l.id,
+          source: l.source || 'doctor',
+          createdBy: l.createdBy || 'Dr. Tarek',
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to synthesize labs for care_events:', err);
+  }
+
+  // Sort descending by occurredAt
+  careEvents.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+  return careEvents;
 }
 
 export async function getPatientVitals(patientId: string): Promise<VitalObservation[]> {

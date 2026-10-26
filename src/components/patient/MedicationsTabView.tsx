@@ -69,6 +69,7 @@ interface MedicationsTabViewProps {
     instructions?: string;
     startDate?: string;
   }) => Promise<void>;
+  onMedicationAdded?: () => void | Promise<void>;
   className?: string;
 }
 
@@ -81,6 +82,7 @@ export function MedicationsTabView({
   onChangeDose,
   onUpdateStatus,
   onUpdateMedication,
+  onMedicationAdded,
   className,
 }: MedicationsTabViewProps) {
   const dict = en.medications;
@@ -1231,6 +1233,7 @@ export function MedicationsTabView({
         patientId={patientId}
         onMedicationAdded={() => {
           setIsOcrOpen(false);
+          if (onMedicationAdded) onMedicationAdded();
         }}
       />
     </div>

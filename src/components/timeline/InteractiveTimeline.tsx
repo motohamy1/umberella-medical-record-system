@@ -27,7 +27,12 @@ export interface InteractiveTimelineProps {
 }
 
 const DAY = 86400000;
-const parseDate = (s: string) => new Date(s);
+const parseDate = (s: string | Date | undefined | null) => {
+  if (!s) return new Date();
+  if (s instanceof Date) return isNaN(s.getTime()) ? new Date() : s;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date() : d;
+};
 const ev = (id: string, kind: CareEvent['kind'], label: string, summary: string, occurredAt: string): CareEvent =>
   ({ id, kind, label, summary, occurredAt, source: 'doctor', orgId: 'org-demo', patientId: 'p', createdBy: 'Dr. Tarek' });
 

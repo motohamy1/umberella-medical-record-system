@@ -121,6 +121,7 @@ interface PaperPatientWorkspaceProps {
     interpretation?: string;
   }) => Promise<void>;
   onSaveAIToNote?: (summaryText: string) => Promise<void>;
+  onMedicationAdded?: () => void | Promise<void>;
 }
 
 function getInitials(name: string): string {
@@ -173,6 +174,7 @@ export function PaperPatientWorkspace({
   onUpdateAllergy,
   onAddGeneticFinding,
   onSaveAIToNote,
+  onMedicationAdded,
 }: PaperPatientWorkspaceProps) {
   // Navigation tabs state: 8 canonical tabs per docs/PACK.md §2.1 & §6.3
   const [activeTab, setActiveTab] = useState<
@@ -1110,6 +1112,7 @@ export function PaperPatientWorkspace({
               onChangeDose={onChangeMedicationDose}
               onUpdateStatus={onUpdateMedicationStatus}
               onUpdateMedication={onUpdateMedication}
+              onMedicationAdded={onMedicationAdded}
             />
           </div>
         ) : activeTab === 'Visits' ? (

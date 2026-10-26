@@ -20,6 +20,19 @@
   ],
   "careEvents": [
     {
+      "id": "ce-1792968497710-607",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "kind": "medication",
+      "label": "Start: Amoxicillin 500mg",
+      "summary": "Amoxicillin 500mg (1x daily, Oral)",
+      "occurredAt": "2026-10-25T22:48:15.069Z",
+      "sourceTable": "medication_events",
+      "sourceId": "me-1792968497700",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek"
+    },
+    {
       "id": "ce-guide-1",
       "orgId": "org-nile",
       "patientId": "p-guide-001",
@@ -144,6 +157,23 @@
   "visits": [],
   "medications": [
     {
+      "id": "med-1792968495070",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "name": "Amoxicillin",
+      "tradeName": "Amoxicillin",
+      "strength": "500mg",
+      "activeIngredientsText": "",
+      "dosesPerDay": 1,
+      "route": "Oral",
+      "instructions": "",
+      "status": "active",
+      "startDate": "2026-10-25T22:48:15.069Z",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek",
+      "createdAt": "2026-10-25T22:48:15.070Z"
+    },
+    {
       "id": "med-guide-1",
       "orgId": "org-nile",
       "patientId": "p-guide-001",
@@ -223,5 +253,18 @@
       "createdBy": "System Walkthrough"
     }
   ],
-  "imaging": []
+  "imaging": [],
+  "medicationEvents": [
+    {
+      "id": "me-1792968497700",
+      "orgId": "org-nile",
+      "patientId": "p-001",
+      "medicationId": "med-1792968495070",
+      "eventType": "start",
+      "detail": "Amoxicillin 500mg initiated (1x daily)",
+      "occurredAt": "2026-10-25T22:48:15.069Z",
+      "source": "doctor",
+      "createdBy": "Dr. Tarek"
+    }
+  ]
 }

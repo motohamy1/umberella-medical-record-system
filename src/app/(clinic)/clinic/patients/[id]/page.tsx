@@ -172,6 +172,15 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
     setEntrySummary('');
   };
 
+  const handleMedicationAdded = async () => {
+    const [medsData, eventsData] = await Promise.all([
+      fetchPatientMedicationsAction(patientId),
+      fetchPatientEventsAction(patientId),
+    ]);
+    setMedications(medsData);
+    setCareEvents(eventsData);
+  };
+
   const handleStartMedication = async (newMed: {
     name: string;
     tradeName?: string;
@@ -455,6 +464,7 @@ function PatientWorkspaceContent({ params }: PatientPageProps) {
         labs={labs}
         medications={medications}
         visits={visits}
+        onMedicationAdded={handleMedicationAdded}
         onAddEntry={() => setIsAddEntryOpen(true)}
         onStartMedication={handleStartMedication}
         onChangeMedicationDose={handleChangeMedicationDose}
